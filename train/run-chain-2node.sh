@@ -45,7 +45,9 @@ restore() {
   # If one rank died, the other would wait out the NCCL timeout holding its GPU,
   # and the serving container could not start there. Kill leftovers first.
   docker exec "$TRAIN_CTR" pkill -f "sft_lora.py|compare.py" >> "$LOG" 2>&1 || true
-  peer docker exec "$TRAIN_CTR" pkill -f "sft_lora.py|compare.py" >> "$LOG" 2>&1 || true
+  # Quoted as ONE remote command string: ssh re-parses it, and a bare | in the
+  # pattern became a shell pipe on the peer ("compare.py: command not found").
+  peer "docker exec $TRAIN_CTR pkill -f 'sft_lora.py|compare.py'" >> "$LOG" 2>&1 || true
   sleep 5
   docker start "$SERVE_CTR" >> "$LOG" 2>&1
   peer docker start "$SERVE_CTR" >> "$LOG" 2>&1
@@ -71,7 +73,16 @@ say "training $RUN on 2 nodes"
 peer "$(torchrun_cmd 1)" > "$WORK/$RUN.rank1.out" 2>&1 &
 rank1=$!
 $(torchrun_cmd 0) > "$WORK/$RUN.out" 2>&1
-wait $rank1
+# Rank 1 can exit non-zero after a successful run: torchrun's exit barrier
+# reports "connection closed" once rank 0 has already left. Rank 0's adapter
+# is the source of truth for success.
+if ! wait $rank1; then
+  if [ -f "$WORK/$RUN/adapter-final/adapter_model.safetensors" ]; then
+    say "rank 1 exited non-zero after rank 0 finished (exit-barrier noise); continuing"
+  else
+    say "rank 1 failed and rank 0 produced no adapter"; exit 1
+  fi
+fi
 say "training done"
 
 if [ -n "$EVAL_ARMS_MASTER" ]; then
