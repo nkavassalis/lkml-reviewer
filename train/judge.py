@@ -148,4 +148,8 @@ if __name__ == "__main__":
     if "--sampled" in argv:
         argv.remove("--sampled")
         BASE, TUNED = "base_sampled", "tuned_sampled"
+    if "--pair" in argv:  # --pair base_sampled,v3_sampled: any two arms
+        i = argv.index("--pair")
+        BASE, TUNED = argv[i + 1].split(",")
+        del argv[i : i + 2]
     main(*argv)

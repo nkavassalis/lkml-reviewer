@@ -16,7 +16,9 @@ decoding (greedy), and identical weights apart from the adapter.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
+import random
 import time
 
 import torch
@@ -77,34 +79,61 @@ def generate(model, tok, prompts, batch: int, max_new: int, *, sample: bool,
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", default="Qwen/Qwen3.8-27B")
-    ap.add_argument("--adapter", required=True)
+    ap.add_argument("--adapter", help="single adapter (v1/v2 layout: base + tuned arms)")
+    ap.add_argument("--adapters", nargs="*", default=[],
+                    help="several adapters as name=path, e.g. v2=run-2/adapter-final")
+    ap.add_argument("--arms", default="",
+                    help="comma list of arms to run: 'base' and/or adapter names")
+    ap.add_argument("--modes", default="greedy,sampled", help="greedy and/or sampled")
     ap.add_argument("--eval", required=True)
     ap.add_argument("--out", required=True)
     ap.add_argument("--limit", type=int, default=None)
+    ap.add_argument("--subset", type=int, default=None,
+                    help="fixed random subset of N eval rows (same N + seed = same rows)")
+    ap.add_argument("--subset-seed", type=int, default=7)
     ap.add_argument("--batch", type=int, default=16)
     # 400 cut off 50/78 base reviews mid-sentence in run-1 and biased the judge.
     ap.add_argument("--max-new", type=int, default=1024)
-    ap.add_argument("--no-sample", action="store_true", help="greedy arms only")
+    ap.add_argument("--no-sample", action="store_true", help="greedy arms only (legacy)")
     ap.add_argument("--max-prompt", type=int, default=3000)
     args = ap.parse_args()
 
     tok = AutoTokenizer.from_pretrained(args.model, padding_side="left")
     with open(args.eval) as f:
         rows = [json.loads(line) for line in f][: args.limit]
+    if args.subset:
+        idx = sorted(random.Random(args.subset_seed).sample(range(len(rows)), args.subset))
+        rows = [rows[i] | {"eval_index": i} for i in idx]
     prompts = build_prompts(tok, rows, args.max_prompt)
     model = AutoModelForImageTextToText.from_pretrained(
         args.model, dtype=torch.bfloat16, device_map={"": 0})
-    model = PeftModel.from_pretrained(model, args.adapter)
+
+    named = dict(a.split("=", 1) for a in args.adapters)
+    if args.adapter:  # legacy layout: one adapter called "tuned"
+        named = {"tuned": args.adapter}
+    first = True
+    for name, path in named.items():
+        if first:
+            model = PeftModel.from_pretrained(model, path, adapter_name=name)
+            first = False
+        else:
+            model.load_adapter(path, adapter_name=name)
     model.eval()
 
-    out = [{"input": r["input"], "reference": r["output"]} for r in rows]
+    out = [{"input": r["input"], "reference": r["output"],
+            **({"eval_index": r["eval_index"]} if "eval_index" in r else {})} for r in rows]
 
-    def run(key: str, sample: bool) -> None:
-        if key.startswith("base"):
-            with model.disable_adapter():
+    def run(arm: str, mode: str) -> None:
+        sample = mode == "sampled"
+        if arm == "base":
+            ctx = model.disable_adapter() if named else contextlib.nullcontext()
+            with ctx:
                 texts = generate(model, tok, prompts, args.batch, args.max_new, sample=sample)
         else:
+            model.set_adapter(arm)
             texts = generate(model, tok, prompts, args.batch, args.max_new, sample=sample)
+        # legacy key names: tuned / base / tuned_sampled / base_sampled
+        key = arm if mode == "greedy" else f"{arm}_sampled"
         for row, text in zip(out, texts, strict=True):
             row[key] = text
         with open(args.out, "w") as f:  # rewritten after every arm: a crash keeps the rest
@@ -112,11 +141,13 @@ def main() -> None:
                 f.write(json.dumps(row) + "\n")
         print(f"wrote {key} for {len(out)} rows to {args.out}", flush=True)
 
-    run("tuned", False)
-    run("base", False)
-    if not args.no_sample:
-        run("tuned_sampled", True)
-        run("base_sampled", True)
+    arms = [a for a in args.arms.split(",") if a] or (["tuned", "base"] if args.adapter else [])
+    modes = [m for m in args.modes.split(",") if m]
+    if args.no_sample:
+        modes = ["greedy"]
+    for mode in modes:
+        for arm in arms:
+            run(arm, mode)
 
 
 if __name__ == "__main__":

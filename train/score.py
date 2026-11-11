@@ -56,6 +56,10 @@ def main(path: str) -> None:
     names = {"reference": "Linus (reference)", "base": "base, greedy",
              "tuned": "fine-tuned, greedy", "base_sampled": "base, sampled",
              "tuned_sampled": "fine-tuned, sampled"}
+    # Known arms in a fixed order, then any others (v2, v3, v3_sampled, ...).
+    extra = [k for k in rows[0] if k not in names and k not in ("input", "eval_index")]
+    for k in extra:
+        names[k] = k.replace("_sampled", ", sampled")
     keys = [k for k in names if k in rows[0]]
     cols = {k: metrics(rows, k) for k in keys}
     print(f"n = {len(rows)} held-out pairs\n")
