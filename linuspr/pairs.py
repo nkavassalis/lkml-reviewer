@@ -49,7 +49,8 @@ _TREE_STATE_RE = re.compile(
 )
 BOOKKEEPING_MAX_CHARS = 400
 TREE_STATE_MAX_CHARS = 200
-_SIGNOFF_RE = re.compile(r"\n[ \t]*Linus[ \t]*\Z")
+# [^\S\n] = any whitespace except newline: hypermail indents with &nbsp; too.
+_SIGNOFF_RE = re.compile(r"\n[^\S\n]*Linus[^\S\n]*\Z")
 
 # The hypermail mirror replaces the *domain* of every local address with x's:
 # `Peter Zijlstra <peterz@xxxxxxxxxxxxx>`, bare `zhouzhouyi@xxxxxxxxx`. Six
@@ -74,6 +75,12 @@ LIST_FOOTER_RES = (
     re.compile(
         r"(?m)(?:^--[ \t]*\n)?^You received this message because you are subscribed "
         r"to the Google Groups[^\n]*(?:\nTo (?:unsubscribe|post|view|visit)[^\n]*)*"
+    ),
+    # Stragglers: any single line of the vger trailer on its own (partial copies,
+    # or a trailer cut in half by a length budget).
+    re.compile(
+        r"(?m)^[ \t>]*(?:To unsubscribe from this list:|the body of a message to majordomo@|"
+        r"More majordomo info at|Please read the FAQ at)[^\n]*\n?"
     ),
 )
 
@@ -126,7 +133,7 @@ LORE_LINK_RE = re.compile(
 # header of a quote that `pair_from` has already moved into the input. Left in
 # the output, it taught run-1 to open 94% of reviews with an invented date and
 # the wrong person (44 of 55 named someone other than the real author).
-ATTRIBUTION_RE = re.compile(r"(?m)^On [^\n]{6,160}?(?:\n[^\n]{0,80}?)?\bwrote:[ \t]*$")
+ATTRIBUTION_RE = re.compile(r"(?m)^On [^\n]{6,160}?(?:\n[^\n]{0,80}?)?\bwrote:[ \t>]*$")
 
 
 def strip_attributions(text: str) -> str:
@@ -148,7 +155,12 @@ def strip_attributions(text: str) -> str:
 def strip_signoff(text: str) -> str:
     """Drop a trailing bare "Linus" signature. It is his style, but a model that
     signs every review with a real person's name is an impersonation tool."""
-    return _SIGNOFF_RE.sub("", text.rstrip()).rstrip()
+    text = text.rstrip()
+    while True:  # some messages carry the signature twice
+        stripped = _SIGNOFF_RE.sub("", text).rstrip()
+        if stripped == text:
+            return text
+        text = stripped
 
 
 def strip_list_footers(text: str) -> str:

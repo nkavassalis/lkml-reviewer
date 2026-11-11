@@ -167,7 +167,8 @@ def cmd_export(args: argparse.Namespace) -> int:
             pr.thread_context = threads.get(f"{pr.month}/{pr.mid}", "")
         print(f"thread context attached to {sum(bool(p.thread_context) for p in pairs)}"
               f"/{len(pairs)} pairs")
-    split = split_by_year(pairs, eval_years=tuple(args.eval_year))
+    eval_years = tuple(args.eval_year or [2024])
+    split = split_by_year(pairs, eval_years=eval_years)
     train, held = split.train, split.eval
     if split.undated:
         print(
@@ -181,7 +182,7 @@ def cmd_export(args: argparse.Namespace) -> int:
                 fh.write(json.dumps(pr.as_sft(keep_signoff=args.keep_signoff),
                                     ensure_ascii=False) + "\n")
         print(f"wrote {len(rows)} pairs to {path}")
-    print(f"eval years {list(args.eval_year)} -> {len(held)} held-out pairs")
+    print(f"eval years {list(eval_years)} -> {len(held)} held-out pairs")
     return 0
 
 
@@ -442,7 +443,7 @@ def main(argv: list[str] | None = None) -> int:
         "--eval-year",
         action="append",
         type=int,
-        default=[2024],
+        default=None,  # append onto a non-empty default kept 2024 in every list
         help="calendar year(s) held out of training (repeatable; default 2024)",
     )
     e.set_defaults(func=cmd_export)

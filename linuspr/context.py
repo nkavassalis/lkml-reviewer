@@ -15,6 +15,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
+from .pairs import strip_list_footers
 from .parse import parse_index
 from .resolve import normalise_subject
 
@@ -105,5 +106,7 @@ class ContextBuilder:
             m = fetch_message_or_none(self.fetcher, month, e.mid)
             self.fetched += 1
             if m is not None:
-                msgs.append(ThreadMessage(author=e.author, text=m.own))
+                # Footers first: clipping to the budget can cut a trailer in
+                # half, and then the footer pattern no longer recognises it.
+                msgs.append(ThreadMessage(author=e.author, text=strip_list_footers(m.own)))
         return select_context(msgs)

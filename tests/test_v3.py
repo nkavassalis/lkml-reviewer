@@ -112,3 +112,30 @@ def test_as_sft_puts_thread_before_patch():
     p.thread_context = "[Al]:\nThat breaks the RCU walk."
     text = p.as_sft()["input"]
     assert text.index("Earlier in this thread") < text.index("The patch") < text.index("diff --git")
+
+
+# --- leftovers found in the first v3 export ---------------------------------
+
+def test_strip_signoff_handles_nbsp_indentation():
+    assert strip_signoff("Tough.\n\n\xa0\xa0\xa0\xa0Linus") == "Tough."
+
+
+def test_attribution_with_stray_quote_marker_is_stripped():
+    from linuspr.pairs import strip_attributions
+    assert strip_attributions("On Thu, Feb 14, 2019 at 10:10 AM Kees Cook wrote:>\n\nBetter.") == "Better."
+
+
+def test_half_a_vger_trailer_is_still_removed():
+    from linuspr.pairs import strip_list_footers
+    text = "Hmm?\n\n\t\tLinus\n\nMore majordomo info at  http://vger.kernel.org/majordomo-info.html\n"
+    assert "majordomo" not in strip_list_footers(text)
+
+
+def test_double_signature_is_fully_stripped():
+    assert strip_signoff("etc.\n\n      Linus\n\n      Linus") == "etc."
+
+
+def test_quoted_vger_trailer_lines_are_removed():
+    from linuspr.pairs import strip_list_footers
+    text = " #else\n\n> --\n> To unsubscribe from this list: send the line x in\n> the body of a message to majordomo@x\n"
+    assert "majordomo" not in strip_list_footers(text) and "#else" in strip_list_footers(text)

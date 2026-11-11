@@ -10,13 +10,17 @@ every step of loss masking, truncation and eval is visible here.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import math
+import os
 import random
 import time
+from datetime import timedelta
 from pathlib import Path
 
 import torch
+import torch.distributed as dist
 from peft import LoraConfig, get_peft_model
 from transformers import AutoModelForImageTextToText, AutoTokenizer
 
@@ -31,11 +35,29 @@ LORA_TARGETS = (
 )
 
 
+# Data parallel across nodes via torchrun (one GPU per node, so local device 0).
+# Inactive unless WORLD_SIZE > 1: single-node runs behave exactly as before.
+WORLD = int(os.environ.get("WORLD_SIZE", "1"))
+RANK = int(os.environ.get("RANK", "0"))
+DISTRIBUTED = WORLD > 1
+
+
 def log(fh, msg: str) -> None:
+    if RANK != 0:
+        return
     line = f"[{time.strftime('%H:%M:%S')}] {msg}"
     print(line, flush=True)
     fh.write(line + "\n")
     fh.flush()
+
+
+def all_sum(*values: float) -> list[float]:
+    """Sum scalars across ranks (identity on one node)."""
+    if not DISTRIBUTED:
+        return list(values)
+    t = torch.tensor(values, dtype=torch.float64, device="cuda")
+    dist.all_reduce(t)
+    return t.tolist()
 
 
 def prompt_text(tok, user: str) -> str:
@@ -83,15 +105,17 @@ def load(path: str, tok, max_len: int, limit: int | None):
 
 @torch.no_grad()
 def eval_loss(model, data) -> tuple[float, int]:
+    """Token-weighted eval loss; each rank takes every WORLD-th example."""
     model.eval()
     total, ntok = 0.0, 0
-    for ids, labels, _ in data:
+    for ids, labels, _ in data[RANK::WORLD]:
         ids, labels = ids[None].cuda(), labels[None].cuda()
         n = int((labels[:, 1:] != -100).sum())
         total += model(input_ids=ids, labels=labels).loss.float().item() * n
         ntok += n
     model.train()
-    return total / max(ntok, 1), ntok
+    total, ntok = all_sum(total, ntok)
+    return total / max(ntok, 1), int(ntok)
 
 
 @torch.no_grad()
@@ -124,12 +148,18 @@ def main() -> None:
     ap.add_argument("--max-steps", type=int, default=None)
     ap.add_argument("--n-samples", type=int, default=5)
     ap.add_argument("--seed", type=int, default=7)
+    ap.add_argument("--save-every", type=int, default=0,
+                    help="also save the adapter every N steps (crash insurance)")
     args = ap.parse_args()
+    if DISTRIBUTED:
+        # Long timeout: rank 0 alone generates samples at the end.
+        dist.init_process_group("nccl", timeout=timedelta(hours=3))
+        torch.cuda.set_device(0)
 
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     fh = open(out / "train.log", "a")  # noqa: SIM115 — lives for the whole run
-    log(fh, f"args {vars(args)}")
+    log(fh, f"args {vars(args)} world_size {WORLD}")
     random.seed(args.seed)
     torch.manual_seed(args.seed)
 
@@ -157,10 +187,14 @@ def main() -> None:
     ))
     trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
     log(fh, f"trainable params {trainable / 1e6:.1f}M")
+    core = model  # unwrapped PeftModel: save / generate / eval go through this
+    if DISTRIBUTED:
+        model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[0])
 
     params = [p for p in model.parameters() if p.requires_grad]
     opt = torch.optim.AdamW(params, lr=args.lr, weight_decay=0.0, betas=(0.9, 0.99))
-    steps_per_epoch = math.ceil(len(train) / args.grad_accum)
+    # --grad-accum is per rank: the effective batch is grad_accum * WORLD.
+    steps_per_epoch = math.ceil(len(train) / (args.grad_accum * WORLD))
     total_steps = math.ceil(steps_per_epoch * args.epochs)
     if args.max_steps:
         total_steps = min(total_steps, args.max_steps)
@@ -172,7 +206,7 @@ def main() -> None:
         prog = (step - warmup) / max(1, total_steps - warmup)
         return args.lr * 0.5 * (1 + math.cos(math.pi * prog))
 
-    base, n = eval_loss(model, evald)
+    base, n = eval_loss(core, evald)
     log(fh, f"eval loss BEFORE training: {base:.4f} over {n} tokens")
 
     step, micro, t_step, tok_step, accum_loss = 0, 0, time.time(), 0, 0.0
@@ -181,11 +215,16 @@ def main() -> None:
     while step < total_steps:
         if not order:
             order = list(range(len(train)))
-            random.shuffle(order)
+            random.shuffle(order)          # same seed on every rank -> same order
+            order = order[RANK::WORLD]     # ...then each rank takes its own shard
         ids, labels, _ = train[order.pop()]
         ids, labels = ids[None].cuda(), labels[None].cuda()
-        loss = model(input_ids=ids, labels=labels).loss
-        (loss / args.grad_accum).backward()
+        boundary = (micro + 1) % args.grad_accum == 0
+        # Sync gradients across nodes only on the optimizer step.
+        sync = contextlib.nullcontext() if (boundary or not DISTRIBUTED) else model.no_sync()
+        with sync:
+            loss = model(input_ids=ids, labels=labels).loss
+            (loss / args.grad_accum).backward()
         accum_loss += loss.item() / args.grad_accum
         tok_step += ids.shape[1]
         micro += 1
@@ -199,19 +238,28 @@ def main() -> None:
         step += 1
         dt = time.time() - t_step
         eta = dt * (total_steps - step) / 3600
-        log(fh, f"step {step}/{total_steps} loss {accum_loss:.4f} gnorm {gn:.3f} "
-            f"lr {lr_at(step - 1):.2e} {tok_step / dt:.0f} tok/s "
+        loss_sum, toks = all_sum(accum_loss, tok_step)
+        log(fh, f"step {step}/{total_steps} loss {loss_sum / WORLD:.4f} gnorm {gn:.3f} "
+            f"lr {lr_at(step - 1):.2e} {toks / dt:.0f} tok/s (all ranks) "
             f"peak {torch.cuda.max_memory_allocated() / 1e9:.1f} GB eta {eta:.2f}h")
         t_step, tok_step, accum_loss = time.time(), 0, 0.0
+        if args.save_every and step % args.save_every == 0 and RANK == 0:
+            core.save_pretrained(out / "adapter-latest")
+            log(fh, f"checkpoint at step {step} -> {out / 'adapter-latest'}")
         if step % steps_per_epoch == 0 or step == total_steps:
-            ev, _ = eval_loss(model, evald)
+            ev, _ = eval_loss(core, evald)
             log(fh, f"eval loss at step {step}: {ev:.4f} (before: {base:.4f})")
-            model.save_pretrained(out / f"adapter-step{step}")
+            if RANK == 0:
+                core.save_pretrained(out / f"adapter-step{step}")
             log(fh, f"saved {out / f'adapter-step{step}'}")
 
-    model.save_pretrained(out / "adapter-final")
-    samples(model, tok, evald, args.n_samples, out / "eval_samples.jsonl")
-    log(fh, f"DONE. adapter at {out / 'adapter-final'}, samples in eval_samples.jsonl")
+    if RANK == 0:
+        core.save_pretrained(out / "adapter-final")
+        samples(core, tok, evald, args.n_samples, out / "eval_samples.jsonl")
+        log(fh, f"DONE. adapter at {out / 'adapter-final'}, samples in eval_samples.jsonl")
+    if DISTRIBUTED:
+        dist.barrier()
+        dist.destroy_process_group()
 
 
 if __name__ == "__main__":
