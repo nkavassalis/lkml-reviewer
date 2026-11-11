@@ -120,9 +120,27 @@ wrote:` rate is 0% by construction. In the raw corpus it is 72%.)
 every case, in both orderings, the judge preferred a real review of the patch
 over a fluent review of a different patch.
 
-The full blind comparison (v2 sampled vs base sampled, 78 patches × 2
-orderings) is still running at the time of publication; results will be added
-here.
+**v2 vs base, both sampled, 78 held-out patches × 2 orderings:**
+
+| outcome | patches |
+|---|---|
+| v2 wins (both orderings) | **44** |
+| base wins (both orderings) | 16 |
+| tie (judge disagreed with itself, or said tie) | 4 |
+| invalid (judge returned no verdict) | 14 |
+
+Of the 60 decided patches, v2 wins 73%. The judge was order-consistent on 60
+of 64 patches where both orderings returned a verdict (94%), and picked slot A
+53% of the time, so there was no meaningful position bias.
+
+**Read the reasons, not just the tally.** v2 often wins by *saying less*. A
+typical verdict: *"Candidate A misreads the diff and makes false ordering
+claims, while Candidate B is generic but does not assert incorrect technical
+facts."* The judge puts accuracy first, and the base model's confident
+fabrications lose more often than v2's thin replies. That's a real win on
+not being wrong, not evidence that v2 has more substance than the base. Where
+the base wins, it's usually because v2 gave a bare ack where the patch needed
+a review.
 
 ## 6. What we learned
 
