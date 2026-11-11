@@ -1,0 +1,190 @@
+<!-- MHonArc v2.6.19 -->
+<!--X-Subject: Re: [PATCH V2] rcutorture: Add CFcommon.arch for the various arch's need -->
+<!--X-From-R13: "Bnhy S. [pYraarl" &#60;cnhyzpxNxreary.bet> -->
+<!--X-Date: Sat,  1 Jun 2024 00:36:02 &#45;0400 (EDT) -->
+<!--X-Message-Id: cd3709dc&#45;2c08&#45;4ac2&#45;a19b&#45;d8edb66195e3@paulmck&#45;laptop -->
+<!--X-Content-Type: text/plain -->
+<!--X-Reference: 20240531235347.1118612&#45;1&#45;zhouzhouyi@gmail.com -->
+<!--X-Head-End-->
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN"
+                      "http://www.w3.org/TR/REC-html40/loose.dtd">
+<html lang=en>
+<head>
+<meta HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=iso-8859-2">
+<title>Linux-Kernel Archive: Re: [PATCH V2] rcutorture: Add CFcommon.arch for the various arch's need</title>
+<meta NAME="Author" CONTENT="&quot;Paul E. McKenney&quot; &lt;paulmck@xxxxxxxxxx&gt;">
+<meta NAME="Subject" CONTENT="Re: [PATCH V2] rcutorture: Add CFcommon.arch for the various arch's need">
+</head> 
+<body BGCOLOR="#FFFFFF" TEXT="#000000">
+
+<!--X-Body-Begin-->
+<!--X-User-Header-->
+<!--X-User-Header-End-->
+<!--X-TopPNI-->
+
+
+<!--X-TopPNI-End-->
+<!--X-MsgBody-->
+<!--X-Subject-Header-Begin-->
+<h1>Re: [PATCH V2] rcutorture: Add CFcommon.arch for the various arch's need</h1>
+<strong>From: </strong>Paul E. McKenney
+<br><strong>Date: </strong> Sat Jun 01 2024 - 00:36:02 EST
+<p>
+<ul>
+<li><strong>Next message: </strong> <a href="00002.html"> Pankaj Gupta: "RE: [EXT] Re: [PATCH v2 5/5] firmware: imx: adds miscdev"</a>
+
+<li><strong>Previous message: </strong> <a href="00000.html"> Michael Kelley: "RE: [PATCH v6] Drivers: hv: Cosmetic changes for hv.c and balloon.c"</a>
+
+
+
+
+
+<li><strong>Messages sorted by: </strong><a href="date.html#00001">[ date ]</a> <a href="index.html#00001">[ thread ]</a> <a href="subject.html#00001">[ subject ]</a> <a href="author.html#00001">[ author ]</a>
+</ul>
+
+<!--X-Subject-Header-End-->
+<!--X-Head-of-Message-->
+<!--X-Head-of-Message-End-->
+<!--X-Head-Body-Sep-Begin-->
+<hr NOSHADE>
+<!--X-Head-Body-Sep-End-->
+<!--X-Body-of-Message-->
+On Fri, May 31, 2024 at 11:53:47PM +0000, Zhouyi Zhou wrote:<br>
+&gt;<i> Add CFcommon.arch for the various arch's need for rcutorture.</i><br>
+&gt;<i> </i><br>
+&gt;<i> According to [1] and [2], this patch</i><br>
+&gt;<i> Fixes: a6fda6dab93c (&quot;rcutorture: Tweak kvm options&quot;) by moving</i><br>
+&gt;<i> x86 specific kernel option CONFIG_HYPERVISOR_GUEST to CFcommon.x86</i><br>
+&gt;<i> </i><br>
+&gt;<i> [1] <a  rel="nofollow" href="https://lore.kernel.org/all/20240427005626.1365935-1-zhouzhouyi@xxxxxxxxx/">https://lore.kernel.org/all/20240427005626.1365935-1-zhouzhouyi@xxxxxxxxx/</a></i><br>
+&gt;<i> [2] <a  rel="nofollow" href="https://lore.kernel.org/all/059d36ce-6453-42be-a31e-895abd35d590@paulmck-laptop/">https://lore.kernel.org/all/059d36ce-6453-42be-a31e-895abd35d590@paulmck-laptop/</a></i><br>
+&gt;<i> </i><br>
+&gt;<i> Tested in x86_64 and PPC VM of Open Source Lab of Oregon State University.</i><br>
+&gt;<i> </i><br>
+&gt;<i> Signed-off-by: Zhouyi Zhou &lt;zhouzhouyi@xxxxxxxxx&gt;</i><br>
+&gt;<i> ---</i><br>
+&gt;<i> Hi Paul,</i><br>
+&gt;<i> </i><br>
+&gt;<i> I tried very hard to find in Linux kernel on how to dig out</i><br>
+&gt;<i> the x86 specific kernel option CONFIG_HYPERVISOR_GUEST before configcheck.sh</i><br>
+&gt;<i> generates ConfigFragment.diags.</i><br>
+&gt;<i> </i><br>
+&gt;<i> I can only find this functionality in scripts/kconfig/conf which travels</i><br>
+&gt;<i> the Kconfig hierarchy.</i><br>
+&gt;<i> </i><br>
+&gt;<i> But the output of scripts/kconfig/conf, which is .config</i><br>
+&gt;<i> is also one of the input of configcheck.sh:</i><br>
+&gt;<i> ```</i><br>
+&gt;<i> kvm-recheck.sh:	configcheck.sh $i/.config $i/ConfigFragment &gt; $i/ConfigFragment.diags 2&gt;&amp;1</i><br>
+&gt;<i> ```</i><br>
+&gt;<i> </i><br>
+&gt;<i> I feel some logic paradox in it ;-)</i><br>
+<br>
+At least now we can say that you looked.<br>
+<br>
+&gt;<i> So, I pick the simplest way.</i><br>
+<br>
+Very good, thank you!<br>
+<br>
+&gt;<i> One more thing, recent change in include/linux/bitmap.h cause the make</i><br>
+&gt;<i> of allmodconfig fail because of warning on both x86 platforms, I am</i><br>
+&gt;<i> going to do research on it.</i><br>
+<br>
+Thank you, looking forward to seeing what you come up with.<br>
+<br>
+One question below.<br>
+<br>
+&gt;<i> Thank your for your guidance</i><br>
+&gt;<i> Zhouyi</i><br>
+&gt;<i> --</i><br>
+&gt;<i>  tools/testing/selftests/rcutorture/bin/kvm-test-1-run.sh | 9 +++++++++</i><br>
+&gt;<i>  tools/testing/selftests/rcutorture/configs/rcu/CFcommon  | 1 -</i><br>
+&gt;<i>  .../selftests/rcutorture/configs/rcu/CFcommon.x86        | 1 +</i><br>
+&gt;<i>  3 files changed, 10 insertions(+), 1 deletion(-)</i><br>
+&gt;<i>  create mode 100644 tools/testing/selftests/rcutorture/configs/rcu/CFcommon.x86</i><br>
+&gt;<i> </i><br>
+&gt;<i> diff --git a/tools/testing/selftests/rcutorture/bin/kvm-test-1-run.sh b/tools/testing/selftests/rcutorture/bin/kvm-test-1-run.sh</i><br>
+&gt;<i> index b33cd8753689..5332224238ba 100755</i><br>
+&gt;<i> --- a/tools/testing/selftests/rcutorture/bin/kvm-test-1-run.sh</i><br>
+&gt;<i> +++ b/tools/testing/selftests/rcutorture/bin/kvm-test-1-run.sh</i><br>
+&gt;<i> @@ -62,6 +62,15 @@ config_override_param () {</i><br>
+&gt;<i>  }</i><br>
+&gt;<i>  </i><br>
+&gt;<i>  echo &gt; $T/KcList</i><br>
+&gt;<i> +if uname -m | grep -q 86</i><br>
+<br>
+Why not just use &quot;uname -m&quot; output itself for the filename extension?<br>
+That way, we wouldn't need this &quot;if&quot; statement.  Or are you looking to<br>
+map both &quot;i686&quot; and &quot;x86_64&quot; to &quot;x86&quot;?<br>
+<br>
+&gt;<i> +# TODO: add other architecture-specific common configuration when needed</i><br>
+&gt;<i> +then</i><br>
+&gt;<i> +	if test -f $config_dir/CFcommon.x86</i><br>
+<br>
+Do we really need this inner &quot;if&quot;?  The config_override_param() bash<br>
+function already checks for ran empty-string third argument.  Or does<br>
+this cause some other problem?<br>
+<br>
+&gt;<i> +	then</i><br>
+&gt;<i> +		config_override_param &quot;$config_dir/CFcommon.x86&quot; KcList\</i><br>
+&gt;<i> +			&quot;`cat $config_dir/CFcommon.x86 2&gt; /dev/null`&quot;</i><br>
+&gt;<i> +	fi</i><br>
+&gt;<i> +fi</i><br>
+&gt;<i>  config_override_param &quot;$config_dir/CFcommon&quot; KcList &quot;`cat $config_dir/CFcommon 2&gt; /dev/null`&quot;</i><br>
+<br>
+Also, the CFcommon.x86 check shouild follow the CFcommon check.  This<br>
+allows architecture-specific values to override the global ones.<br>
+<br>
+							Thanx, Paul<br>
+<br>
+&gt;<i>  config_override_param &quot;$config_template&quot; KcList &quot;`cat $config_template 2&gt; /dev/null`&quot;</i><br>
+&gt;<i>  config_override_param &quot;--gdb options&quot; KcList &quot;$TORTURE_KCONFIG_GDB_ARG&quot;</i><br>
+&gt;<i> diff --git a/tools/testing/selftests/rcutorture/configs/rcu/CFcommon b/tools/testing/selftests/rcutorture/configs/rcu/CFcommon</i><br>
+&gt;<i> index 0e92d85313aa..cf0387ae5358 100644</i><br>
+&gt;<i> --- a/tools/testing/selftests/rcutorture/configs/rcu/CFcommon</i><br>
+&gt;<i> +++ b/tools/testing/selftests/rcutorture/configs/rcu/CFcommon</i><br>
+&gt;<i> @@ -1,6 +1,5 @@</i><br>
+&gt;<i>  CONFIG_RCU_TORTURE_TEST=y</i><br>
+&gt;<i>  CONFIG_PRINTK_TIME=y</i><br>
+&gt;<i> -CONFIG_HYPERVISOR_GUEST=y</i><br>
+&gt;<i>  CONFIG_PARAVIRT=y</i><br>
+&gt;<i>  CONFIG_KVM_GUEST=y</i><br>
+&gt;<i>  CONFIG_KCSAN_ASSUME_PLAIN_WRITES_ATOMIC=n</i><br>
+&gt;<i> diff --git a/tools/testing/selftests/rcutorture/configs/rcu/CFcommon.x86 b/tools/testing/selftests/rcutorture/configs/rcu/CFcommon.x86</i><br>
+&gt;<i> new file mode 100644</i><br>
+&gt;<i> index 000000000000..2770560d56a0</i><br>
+&gt;<i> --- /dev/null</i><br>
+&gt;<i> +++ b/tools/testing/selftests/rcutorture/configs/rcu/CFcommon.x86</i><br>
+&gt;<i> @@ -0,0 +1 @@</i><br>
+&gt;<i> +CONFIG_HYPERVISOR_GUEST=y</i><br>
+&gt;<i> -- </i><br>
+&gt;<i> 2.25.1</i><br>
+&gt;<i> </i><br>
+<br>
+<br>
+
+<!--X-Body-of-Message-End-->
+<!--X-MsgBody-End-->
+<!--X-Follow-Ups-->
+<hr NOSHADE>
+<!--X-Follow-Ups-End-->
+<!--X-References-->
+<!--X-References-End-->
+<!--X-BotPNI-->
+<ul>
+<li><strong>Next message: </strong> <a href="00002.html"> Pankaj Gupta: "RE: [EXT] Re: [PATCH v2 5/5] firmware: imx: adds miscdev"</a>
+
+<li><strong>Previous message: </strong> <a href="00000.html"> Michael Kelley: "RE: [PATCH v6] Drivers: hv: Cosmetic changes for hv.c and balloon.c"</a>
+
+
+
+
+
+<li><strong>Messages sorted by: </strong><a href="date.html#00001">[ date ]</a> <a href="index.html#00001">[ thread ]</a> <a href="subject.html#00001">[ subject ]</a> <a href="author.html#00001">[ author ]</a>
+</ul>
+
+<!--X-BotPNI-End-->
+<!--X-User-Footer-->
+<!--X-User-Footer-End-->
+</body>
+</html>

@@ -1,0 +1,10 @@
+# House lint settings. Curated rule set — the point is catching real bugs
+# (undefined names, unused imports, mutable defaults, shadowed builtins),
+# not formatting taste. Line length is handled by review, not the linter.
+line-length = 100
+target-version = "py311"
+
+[lint]
+select = ["E4", "E7", "E9", "F", "B", "SIM", "C4", "UP", "I"]
+ignore = ["E501", "B008", "SIM105", "SIM108"]
+exclude = [".venv", "venv", "__pycache__", "tests/screenshots", "data", "backups"]

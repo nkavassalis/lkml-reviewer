@@ -1,0 +1,7 @@
+# Dev/test extras. Pin playwright to the chromium build already cached in
+# ~/.cache/ms-playwright on the dev box (chromium-1243), or the ui tier fails with
+# "Executable doesn't exist" until you re-run `playwright install chromium`.
+pillow>=10          # icon generation + the PWA icon contract test
+pytest>=8
+playwright==1.63.0
+ruff>=0.6

@@ -1,0 +1,43 @@
+# virtualenv / caches
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# secrets and local config — never committed
+.env
+.env.*
+!.env.example
+*.ini
+config.json
+config.local.yaml
+secrets/
+*.pem
+*.key
+
+# local data
+*.sqlite
+*.sqlite-*
+*.db
+*.db-*
+data/
+logs/
+state/
+backups/
+
+# browser-test artefacts (may contain live user data)
+tests/screenshots/
+playwright-report/
+
+# editors / os
+.DS_Store
+.idea/
+.vscode/
+
+# local-only secret-scan watchlist (host names, addresses)
+.secret-watchlist

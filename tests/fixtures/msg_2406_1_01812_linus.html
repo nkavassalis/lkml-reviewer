@@ -1,0 +1,167 @@
+<!-- MHonArc v2.6.19 -->
+<!--X-Subject: Re: [PATCH] x86: add 'runtime constant' infrastructure -->
+<!--X-From-R13: Zvahf Fbeinyqf &#60;gbeinyqfNyvahk&#45;sbhaqngvba.bet> -->
+<!--X-Date: Mon, 10 Jun 2024 14:09:20 &#45;0400 (EDT) -->
+<!--X-Message-Id: CAHk&#45;=wh5DAR=a12cbKbxDy875hTOtPmNUDEn+dU2VS47h9MgcQ@mail.gmail.com -->
+<!--X-Content-Type: text/plain -->
+<!--X-Reference: 20240608193504.429644&#45;2&#45;torvalds@linux&#45;foundation.org -->
+<!--X-Reference: 20240610104352.GT8774@noisy.programming.kicks&#45;ass.net -->
+<!--X-Head-End-->
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN"
+                      "http://www.w3.org/TR/REC-html40/loose.dtd">
+<html lang=en>
+<head>
+<meta HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=iso-8859-2">
+<title>Linux-Kernel Archive: Re: [PATCH] x86: add 'runtime constant' infrastructure</title>
+<meta NAME="Author" CONTENT="Linus Torvalds &lt;torvalds@xxxxxxxxxxxxxxxxxxxx&gt;">
+<meta NAME="Subject" CONTENT="Re: [PATCH] x86: add 'runtime constant' infrastructure">
+</head> 
+<body BGCOLOR="#FFFFFF" TEXT="#000000">
+
+<!--X-Body-Begin-->
+<!--X-User-Header-->
+<!--X-User-Header-End-->
+<!--X-TopPNI-->
+
+
+<!--X-TopPNI-End-->
+<!--X-MsgBody-->
+<!--X-Subject-Header-Begin-->
+<h1>Re: [PATCH] x86: add 'runtime constant' infrastructure</h1>
+<strong>From: </strong>Linus Torvalds
+<br><strong>Date: </strong> Mon Jun 10 2024 - 14:09:20 EST
+<p>
+<ul>
+<li><strong>Next message: </strong> <a href="01813.html"> Maxwell Bland: "[PATCH bpf-next v5 2/3] arm64/cfi,bpf: Support kCFI + BPF on arm64"</a>
+
+<li><strong>Previous message: </strong> <a href="01811.html"> Maxwell Bland: "[PATCH bpf-next v5 1/3] cfi: add C CFI type macro"</a>
+
+<li><strong>In reply to: </strong> <a href="03681.html"> Linus Torvalds: "Re: [PATCH] x86: add 'runtime constant' infrastructure"</a>
+
+
+
+<li><strong>Messages sorted by: </strong><a href="date.html#01812">[ date ]</a> <a href="index.html#01812">[ thread ]</a> <a href="subject.html#01812">[ subject ]</a> <a href="author.html#01812">[ author ]</a>
+</ul>
+
+<!--X-Subject-Header-End-->
+<!--X-Head-of-Message-->
+<!--X-Head-of-Message-End-->
+<!--X-Head-Body-Sep-Begin-->
+<hr NOSHADE>
+<!--X-Head-Body-Sep-End-->
+<!--X-Body-of-Message-->
+On Mon, 10 Jun 2024 at 03:43, Peter Zijlstra &lt;peterz@xxxxxxxxxxxxx&gt; wrote:<br>
+&gt;<i></i><br>
+&gt;<i> --- linux-2.6.orig/arch/Kconfig</i><br>
+&gt;<i> +++ linux-2.6/arch/Kconfig</i><br>
+&gt;<i> @@ -1492,6 +1492,9 @@ config HAVE_SPARSE_SYSCALL_NR</i><br>
+&gt;<i>  config ARCH_HAS_VDSO_DATA</i><br>
+&gt;<i>         bool</i><br>
+&gt;<i></i><br>
+&gt;<i> +config HAVE_RUNTIME_CONST</i><br>
+&gt;<i> +       bool</i><br>
+<br>
+No. We're not adding a stupid config variable, when nothing actually wants it.<br>
+<br>
+&gt;<i> +#define __runtime_const(sym, op, type)                 \</i><br>
+&gt;<i> +({                                                     \</i><br>
+&gt;<i> +       typeof(sym) __ret;                              \</i><br>
+&gt;<i> +       asm(op &quot; %1, %0\n1:\n&quot;                          \</i><br>
+&gt;<i> +           &quot;.pushsection __runtime_const, \&quot;aw\&quot;\n\t&quot;  \</i><br>
+&gt;<i> +           &quot;.long %c3 - .      # sym \n\t&quot;             \</i><br>
+&gt;<i> +           &quot;.long %c2          # size \n\t&quot;            \</i><br>
+&gt;<i> +           &quot;.long 1b - %c2 - . # addr \n\t&quot;            \</i><br>
+&gt;<i> +           &quot;.popsection\n\t&quot;                           \</i><br>
+&gt;<i> +           : &quot;=r&quot; (__ret)                              \</i><br>
+&gt;<i> +           : &quot;i&quot; ((type)0x0123456789abcdefull),        \</i><br>
+&gt;<i> +             &quot;i&quot; (sizeof(type)),                       \</i><br>
+&gt;<i> +             &quot;i&quot; ((void *)&amp;sym));                      \</i><br>
+&gt;<i> +       __ret;                                          \</i><br>
+&gt;<i> +})</i><br>
+&gt;<i> +</i><br>
+&gt;<i> +#define runtime_const(sym)                                             \</i><br>
+&gt;<i> +({                                                                     \</i><br>
+&gt;<i> +       typeof(sym) __ret;                                              \</i><br>
+&gt;<i> +       switch(sizeof(sym)) {                                           \</i><br>
+&gt;<i> +       case 1: __ret = __runtime_const(sym, &quot;movb&quot;, u8); break;        \</i><br>
+&gt;<i> +       case 2: __ret = __runtime_const(sym, &quot;movs&quot;, u16); break;       \</i><br>
+&gt;<i> +       case 4: __ret = __runtime_const(sym, &quot;movl&quot;, u32); break;       \</i><br>
+&gt;<i> +       case 8: __ret = __runtime_const(sym, &quot;movq&quot;, u64); break;       \</i><br>
+&gt;<i> +       default: BUG();                                                 \</i><br>
+&gt;<i> +       }                                                               \</i><br>
+&gt;<i> +       __ret;                                                          \</i><br>
+&gt;<i> +})</i><br>
+<br>
+And no. We're not adding magic &quot;generic&quot; helpers that have zero use<br>
+and just make the code harder to read, and don't even work on 32-bit<br>
+x86 anyway.<br>
+<br>
+Because I didn't test, but I am pretty sure that clang will not<br>
+compile the above on x86-32, because clang verifies the inline asm,<br>
+and &quot;movq&quot; isn't a valid instruction.<br>
+<br>
+We had exactly that for the uaccess macros, and needed to special-case<br>
+the 64-bit case for that reason.<br>
+<br>
+And we don't *need* to. All of the above is garbage waiting for a use<br>
+that shouldn't exist.<br>
+<br>
+&gt;<i> +++ linux-2.6/kernel/runtime_const.c</i><br>
+&gt;<i> @@ -0,0 +1,119 @@</i><br>
+<br>
+And here you basically tripled the size of the patch in order to have<br>
+just one section, when I had per-symbol sections.<br>
+<br>
+So no.<br>
+<br>
+I envision a *couple* of runtime constants. The absolutely only reason<br>
+to use a runtime constant is that it is *so* hot that the difference<br>
+between &quot;load a variable&quot; and &quot;write code with a constant&quot; is<br>
+noticeable.<br>
+<br>
+I can point to exactly one such case in the kernel right now.<br>
+<br>
+I'm sure there are others, but I'd expect that &quot;others&quot; to be mainly a handful.<br>
+<br>
+This needs to be simple, obvious, and literally designed for very targeted use.<br>
+<br>
+This is a *very* special case for a *very* special code. Not for generic use.<br>
+<br>
+I do not ever expect to see this used by modules, for example. There<br>
+is no way in hell I will expose the instruction rewriting to a module.<br>
+The *use* of a constant is a _maybe_, but it's questionable too. By<br>
+definition, module code cannot be all that core.<br>
+<br>
+             Linus<br>
+<br>
+<br>
+
+<!--X-Body-of-Message-End-->
+<!--X-MsgBody-End-->
+<!--X-Follow-Ups-->
+<hr NOSHADE>
+<!--X-Follow-Ups-End-->
+<!--X-References-->
+
+
+
+
+<!--X-References-End-->
+<!--X-BotPNI-->
+<ul>
+<li><strong>Next message: </strong> <a href="01813.html"> Maxwell Bland: "[PATCH bpf-next v5 2/3] arm64/cfi,bpf: Support kCFI + BPF on arm64"</a>
+
+<li><strong>Previous message: </strong> <a href="01811.html"> Maxwell Bland: "[PATCH bpf-next v5 1/3] cfi: add C CFI type macro"</a>
+
+<li><strong>In reply to: </strong> <a href="03681.html"> Linus Torvalds: "Re: [PATCH] x86: add 'runtime constant' infrastructure"</a>
+
+
+
+<li><strong>Messages sorted by: </strong><a href="date.html#01812">[ date ]</a> <a href="index.html#01812">[ thread ]</a> <a href="subject.html#01812">[ subject ]</a> <a href="author.html#01812">[ author ]</a>
+</ul>
+
+<!--X-BotPNI-End-->
+<!--X-User-Footer-->
+<!--X-User-Footer-End-->
+</body>
+</html>

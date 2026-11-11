@@ -1,0 +1,77 @@
+#!/usr/bin/env bash
+# House pre-push guard. Installed by meta/scripts/new-project.sh.
+#
+# Policy (see meta/global/HOUSE-STYLE.md):
+#   * local-path / file:// remotes  -> always allowed (that's a disk backup)
+#   * any network remote:
+#       - repo marked local-only (.meta-local-only present) -> REFUSE
+#       - otherwise (REAL project) -> run scripts/gate.sh; refuse unless it exits 0
+#
+# Deliberate override (only after Nick asked for an off-machine push in plain words):
+#   ALLOW_REMOTE_GIT_PUSH=1 git push ...
+set -uo pipefail
+
+remote="${1:-}"; url="${2:-}"
+
+if [ "${ALLOW_REMOTE_GIT_PUSH:-0}" = "1" ]; then
+  echo "pre-push: override set, allowing push to ${remote:-?} (${url:-?})" >&2
+  exit 0
+fi
+
+# Read the refs git pipes in. local-history holds the pre-publication commits
+# (private infrastructure details) and must never leave this machine.
+refused_ref=""
+while read -r local_ref _lsha remote_ref _rsha; do
+  case "$local_ref $remote_ref" in *local-history*) refused_ref="$local_ref" ;; esac
+done
+
+if [ -n "$refused_ref" ]; then
+  echo "pre-push: REFUSED. local-history ($refused_ref) is local-only." >&2
+  exit 1
+fi
+
+case "$url" in
+  ""|/*|~/*|./*|file://*) exit 0 ;;                       # local / disk backup
+esac
+
+# git can also be handed a URL directly with no configured remote ($2 empty):
+# in that case the URL is in the remote argument.
+case "$remote" in
+  http://*|https://*|git://*|ssh://*|*@*:*) url="$remote" ;;
+esac
+case "$url" in
+  http://*|https://*|git://*|ssh://*|*@*:*) : ;;          # network push, gate below
+  *) exit 0 ;;
+esac
+
+root=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+
+if [ -f "$root/.meta-local-only" ]; then
+  cat >&2 <<EOF
+pre-push: REFUSED. This repo is marked local-only (.meta-local-only).
+  target: ${remote:-<url>} ${url}
+  SIMPLE/local-only repos never reach GitHub or any network remote.
+  If Nick asked for this push in plain words: ALLOW_REMOTE_GIT_PUSH=1 git push ...
+EOF
+  exit 1
+fi
+
+if [ -x "$root/scripts/gate.sh" ]; then
+  echo "pre-push: running the test gate (scripts/gate.sh)..." >&2
+  if ! "$root/scripts/gate.sh"; then
+    echo "pre-push: REFUSED — the gate failed. Fix it; do not push broken code." >&2
+    exit 1
+  fi
+else
+  echo "pre-push: WARNING — no scripts/gate.sh; the REAL-project gate was NOT run." >&2
+  echo "           (unit + ui tiers, lint, secret scan). Copy it from ~/meta/templates." >&2
+fi
+
+# Secret/internal-detail scan on what's about to leave the box.
+if [ -x "$root/scripts/secret-scan.sh" ]; then
+  scan_args=(--range "origin/main..HEAD")
+  git rev-parse -q --verify origin/main >/dev/null || scan_args=(--all)  # first push
+  "$root/scripts/secret-scan.sh" "${scan_args[@]}" || {
+    echo "pre-push: REFUSED — secret/internal-detail scan found hits." >&2; exit 1; }
+fi
+exit 0
