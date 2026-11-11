@@ -36,6 +36,7 @@ RAW = DATA / "raw"
 CORPUS = DATA / "linus_messages.jsonl"
 COMMIT_SUBJECTS = DATA / "commit_subjects.json"
 PATCHES = DATA / "patch_texts.json"
+THREADS = DATA / "thread_context.json"
 PAIRS = DATA / "review_pairs.jsonl"
 
 _ATTR_RE = re.compile(r"^On .{10,120} wrote:$", re.M)
@@ -122,7 +123,7 @@ def cmd_pairs(args: argparse.Namespace) -> int:
     patches = {}
     if PATCHES.exists():
         patches = json.loads(PATCHES.read_text(encoding="utf-8"))
-    pairs = build_pairs(msgs, patches=patches)
+    pairs = build_pairs(msgs, patches=patches, legacy=args.legacy_gate)
     PAIRS.parent.mkdir(parents=True, exist_ok=True)
     with PAIRS.open("w", encoding="utf-8") as fh:
         for pr in pairs:
@@ -160,6 +161,12 @@ def cmd_export(args: argparse.Namespace) -> int:
         )
     from .split import split_by_year
 
+    if THREADS.exists() and not args.no_thread:
+        threads = json.loads(THREADS.read_text(encoding="utf-8"))
+        for pr in pairs:
+            pr.thread_context = threads.get(f"{pr.month}/{pr.mid}", "")
+        print(f"thread context attached to {sum(bool(p.thread_context) for p in pairs)}"
+              f"/{len(pairs)} pairs")
     split = split_by_year(pairs, eval_years=tuple(args.eval_year))
     train, held = split.train, split.eval
     if split.undated:
@@ -171,9 +178,40 @@ def cmd_export(args: argparse.Namespace) -> int:
         rows = (held if held_out else train)[: args.limit]
         with path.open("w", encoding="utf-8") as fh:
             for pr in rows:
-                fh.write(json.dumps(pr.as_sft(), ensure_ascii=False) + "\n")
+                fh.write(json.dumps(pr.as_sft(keep_signoff=args.keep_signoff),
+                                    ensure_ascii=False) + "\n")
         print(f"wrote {len(rows)} pairs to {path}")
     print(f"eval years {list(args.eval_year)} -> {len(held)} held-out pairs")
+    return 0
+
+
+def cmd_context(args: argparse.Namespace) -> int:
+    """Collect earlier thread messages for every pair (v3). Resumable."""
+    from .context import ContextBuilder
+
+    pairs = _load_pairs()
+    if not pairs:
+        print("no pairs yet — run `pairs` first", file=sys.stderr)
+        return 1
+    f = Fetcher(cache_dir=RAW, delay=args.delay)
+    cb = ContextBuilder(f)
+    if args.dry_run:
+        need = sum(cb.uncached(p.month, p.subject, p.mid) for p in pairs)
+        print(f"{len(pairs)} pairs; {need} thread pages not cached "
+              f"(~{need * max(args.delay, 0.2) / 60:.0f} min of polite fetching, "
+              "before network latency)")
+        return 0
+    threads = json.loads(THREADS.read_text(encoding="utf-8")) if THREADS.exists() else {}
+    for i, p in enumerate(pairs, 1):
+        key = f"{p.month}/{p.mid}"
+        if key not in threads:
+            threads[key] = cb.build(p.month, p.subject, p.mid)
+        if i % 200 == 0:
+            THREADS.write_text(json.dumps(threads, ensure_ascii=False), encoding="utf-8")
+            print(f"  {i}/{len(pairs)} pairs, {f.requests_made} requests", flush=True)
+    THREADS.write_text(json.dumps(threads, ensure_ascii=False), encoding="utf-8")
+    have = sum(bool(v) for v in threads.values())
+    print(f"thread context for {have}/{len(pairs)} pairs -> {THREADS}")
     return 0
 
 
@@ -378,7 +416,16 @@ def main(argv: list[str] | None = None) -> int:
     )
     c.set_defaults(func=cmd_crawl)
 
-    sub.add_parser("pairs").set_defaults(func=cmd_pairs)
+    pr = sub.add_parser("pairs")
+    pr.add_argument("--legacy-gate", action="store_true",
+                    help="v2 gate: quote must carry code; no bookkeeping filter")
+    pr.set_defaults(func=cmd_pairs)
+
+    cx = sub.add_parser("context", help="earlier thread messages per pair (v3)")
+    cx.add_argument("--dry-run", action="store_true",
+                    help="count uncached pages the mirror would serve; fetch nothing")
+    cx.add_argument("--delay", type=float, default=0.2)
+    cx.set_defaults(func=cmd_context)
 
     e = sub.add_parser("export")
     e.add_argument("--limit", type=int, default=10**9)
@@ -387,6 +434,10 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="skip the abuse filter (training runs should not do this)",
     )
+    e.add_argument("--keep-signoff", action="store_true",
+                   help='keep the trailing "Linus" signature (v2 behaviour)')
+    e.add_argument("--no-thread", action="store_true",
+                   help="ignore data/thread_context.json (v2 behaviour)")
     e.add_argument(
         "--eval-year",
         action="append",

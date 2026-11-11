@@ -18,8 +18,9 @@ import json
 import os
 import re
 import sys
+import time
 import urllib.request
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Any OpenAI-compatible endpoint. Set JUDGE_URL to your server; nothing about
 # the network it lives on belongs in the repo.
@@ -114,6 +115,17 @@ def retry(pair: tuple[dict, dict]) -> dict:
     return resolve(row, v1, v2)
 
 
+def _progress(pool, fn, items) -> list:
+    """pool.map with a progress line every 5 rows, results in input order.
+    The first version printed nothing until the end, so its ETA was a guess."""
+    futures = [pool.submit(fn, it) for it in items]
+    for done, _ in enumerate(as_completed(futures), 1):
+        if done % 5 == 0 or done == len(futures):
+            print(f"[{time.strftime('%H:%M:%S')}] {done}/{len(futures)} rows judged",
+                  flush=True)
+    return [f.result() for f in futures]
+
+
 def main(src: str, dst: str, mode: str = "") -> None:
     with open(src) as f:
         rows = [json.loads(line) for line in f]
@@ -121,9 +133,9 @@ def main(src: str, dst: str, mode: str = "") -> None:
         if mode == "--retry-invalid":
             with open(dst) as f:
                 prev = [json.loads(line) for line in f]
-            results = list(pool.map(retry, zip(rows, prev, strict=True)))
+            results = _progress(pool, retry, list(zip(rows, prev, strict=True)))
         else:
-            results = list(pool.map(judge, rows))
+            results = _progress(pool, judge, rows)
     with open(dst, "w") as f:
         for r in results:
             f.write(json.dumps(r) + "\n")

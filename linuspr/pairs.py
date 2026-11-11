@@ -29,6 +29,28 @@ _OFF_TOPIC_RE = re.compile(
 )
 _RELEASE_RE = re.compile(r"^Linux \d+\.\d+", re.I)
 
+# Bookkeeping replies: "Ack.", "Applied, thanks", "I took this directly", "which
+# tree is this in?". They answer the thread, not the patch, so a model trained
+# on them learns to emit vague acks. Dropped only when short AND free of any
+# technical token, so "Ack, but the lock in foo_bar() is wrong" survives.
+_BOOKKEEPING_RE = re.compile(
+    r"^\W*(ack(ed)?|applied|pulled|merged|thanks|thank you|ok(ay)?|good|looks good|"
+    r"i took|i'?ve (applied|taken|merged|pulled)|will apply|queued|which tree|"
+    r"is this in|not in my tree)\b",
+    re.I,
+)
+_TECH_TOKEN_RE = re.compile(
+    r"[A-Za-z_]\w*\(\)|\b[a-z]+_[a-z0-9_]+\b|->|#define|\bstruct\b|\block(ing)?\b|"
+    r"\brace\b|\bbug\b|\bregression\b|\bbreaks?\b"
+)
+# Anywhere in a *very* short reply: questions about tree state, not the code.
+_TREE_STATE_RE = re.compile(
+    r"\b(in my tree|already (applied|merged|upstream)|which tree|my queue)\b", re.I
+)
+BOOKKEEPING_MAX_CHARS = 400
+TREE_STATE_MAX_CHARS = 200
+_SIGNOFF_RE = re.compile(r"\n[ \t]*Linus[ \t]*\Z")
+
 # The hypermail mirror replaces the *domain* of every local address with x's:
 # `Peter Zijlstra <peterz@xxxxxxxxxxxxx>`, bare `zhouzhouyi@xxxxxxxxx`. Six
 # consecutive x's inside a domain is not something real text produces, and
@@ -69,17 +91,29 @@ class ReviewPair:
     code_hits: int = 0
     commit: str = ""
     resolved_context: str = ""
+    thread_context: str = ""  # earlier messages in the thread (v3), see context.py
 
-    def as_sft(self) -> dict[str, str]:
+    def as_sft(self, *, keep_signoff: bool = False) -> dict[str, str]:
         """Shape used for chat/SFT export: patch context in, review out.
 
         Mangled mirror emails are scrubbed here and only here — the corpus and
         review_pairs.jsonl keep the raw text so the transform is reversible.
+
+        Input order is subject, thread, patch: the trainer truncates over-long
+        inputs from the tail, so a long patch loses its end, never the thread.
         """
         context = self.resolved_context or self.context
+        parts = [f"Subject: {self.subject}"]
+        if self.thread_context:
+            parts.append(f"--- Earlier in this thread (most recent last) ---\n{self.thread_context}")
+            parts.append("--- The patch ---")
+        parts.append(context)
+        review = strip_attributions(strip_list_footers(self.review))
+        if not keep_signoff:
+            review = strip_signoff(review)
         return {
-            "input": scrub_mangled(strip_list_footers(f"Subject: {self.subject}\n\n{context}")),
-            "output": scrub_mangled(strip_attributions(strip_list_footers(self.review))),
+            "input": scrub_mangled(strip_list_footers("\n\n".join(parts))),
+            "output": scrub_mangled(review),
         }
 
 
@@ -109,6 +143,12 @@ def strip_attributions(text: str) -> str:
         pos = end
     out.append(text[pos:])
     return "".join(out)
+
+
+def strip_signoff(text: str) -> str:
+    """Drop a trailing bare "Linus" signature. It is his style, but a model that
+    signs every review with a real person's name is an impersonation tool."""
+    return _SIGNOFF_RE.sub("", text.rstrip()).rstrip()
 
 
 def strip_list_footers(text: str) -> str:
@@ -197,17 +237,36 @@ def is_review(msg: Message) -> bool:
     return not noise  # "applied" / "pulled" is bookkeeping, not review
 
 
-def pair_from(msg: Message) -> ReviewPair | None:
-    """Build a pair, or None when the message fails the quality gates."""
+def is_bookkeeping(review: str) -> bool:
+    """Short ack/applied/which-tree reply with no technical content."""
+    text = ATTRIBUTION_RE.sub("", review).strip()
+    if _TECH_TOKEN_RE.search(text):
+        return False
+    if len(text) < TREE_STATE_MAX_CHARS and _TREE_STATE_RE.search(text):
+        return True
+    return len(text) < BOOKKEEPING_MAX_CHARS and bool(_BOOKKEEPING_RE.match(text))
+
+
+def pair_from(msg: Message, *, has_patch: bool = False, legacy: bool = False) -> ReviewPair | None:
+    """Build a pair, or None when the message fails the quality gates.
+
+    v3 gate: a reply qualifies if Linus quoted code (code_evidence >= 3, the v2
+    rule) OR we recovered the real patch it answers. The v2 gate looked only at
+    the quote, so it threw away 4,975 replies whose patch we already had.
+    `legacy=True` reproduces the v2 gate exactly (for rebuilding v2's data).
+    """
     if not is_review(msg):
         return None
     context = unquote(msg.quoted)
     review = msg.own.strip()
     hits = code_evidence(context)
-    if hits < 3:  # no code-like content in what he quoted -> not a review
-        return None
-    if len(review) < 120 or len(context) < 80:
-        return None
+    quote_ok = hits >= 3 and len(context) >= 80
+    if legacy:
+        if not quote_ok or len(review) < 120:
+            return None
+    else:
+        if not (quote_ok or has_patch) or len(review) < 120 or is_bookkeeping(review):
+            return None
     return ReviewPair(
         mid=msg.mid,
         month=msg.month,
@@ -222,14 +281,14 @@ def pair_from(msg: Message) -> ReviewPair | None:
 
 
 def build_pairs(
-    msgs: list[Message], *, patches: dict[str, str] | None = None
+    msgs: list[Message], *, patches: dict[str, str] | None = None, legacy: bool = False
 ) -> list[ReviewPair]:
     """Gate a corpus into pairs, attaching recovered patch text when we have it."""
     patches = patches or {}
     out: list[ReviewPair] = []
     seen: set[tuple[str, str]] = set()
     for m in msgs:
-        p = pair_from(m)
+        p = pair_from(m, has_patch=patch_key(m) in patches, legacy=legacy)
         if p is not None and patch_key(m) in patches:
             p.resolved_context = patches[patch_key(m)]
         if p is None:
