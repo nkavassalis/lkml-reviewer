@@ -50,6 +50,21 @@ but it's untested on this cluster.
 A short `torchrun` data-parallel smoke test across both Sparks. If it scales,
 v3 trains on both nodes; if not, on one.
 
+**Why two nodes for v3 when run-1 and v2 used one.** v2 was 1,175 short pairs,
+~3 h per epoch on one GPU. A second node would have saved ~1.5 h, and paid for
+it with untested setup: copying the model to the second node, a second
+container, NCCL, and data-parallel code. One node was the option most likely
+to work first time, and it was chosen for that. v3 is 4.4× the pairs, and
+thread context makes each input ~1.9× longer (~13.9M tokens per epoch): ~28 h
+on one node. At that size the second node is worth its setup.
+
+**Measured (smoke test, 2026-11-11):** 258–276 tok/s across both nodes vs 163
+on one (1.6–1.7×, below the 1.85× assumed), 71.9 GB peak per node at 4,096
+tokens. NCCL over TCP on the 200 Gb link: LoRA syncs only ~435 MB of gradients
+once per optimizer step, so RDMA isn't needed. **Kept identical to v2:**
+effective batch 8 per optimizer step (4 per node × 2), learning rate, schedule
+and LoRA config, so v2 → v3 differences come from the data, not the hardware.
+
 ## Phase 2: train v3
 
 **Decided (2026-11-11):** patch + ~1k tokens of thread context, all 6,352

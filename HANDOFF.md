@@ -53,7 +53,12 @@ can't leave the service down.
 | v3 candidates (new gate, measured) | 6,352; 840 if 2023–2024 is held out |
 
 Training: one GB10 runs BF16 LoRA on the 27B at **~163 tok/s, peak 71.5 GB at
-4,096 tokens**. 1.7M tokens ≈ 3 h per epoch. Model load ≈ 6 min.
+4,096 tokens**. 1.7M tokens ≈ 3 h per epoch. Model load ≈ 6 min. Two nodes
+(`train/run-chain-2node.sh`, torchrun data parallel): **258–276 tok/s
+(1.6–1.7×)**, 71.9 GB per node. Use one node for small runs (v1/v2: not worth
+the setup) and two when a run would exceed ~half a day on one (v3: ~28 h →
+~14 h). Keep the effective batch fixed (`--grad-accum` is per rank) so runs
+stay comparable.
 
 ## 3. Traps already paid for: do not re-pay them
 

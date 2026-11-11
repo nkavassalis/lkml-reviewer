@@ -16,7 +16,7 @@ swearing.**
 | data | 1,175 `(patch, Linus review)` pairs mined from LKML 1996–2026, 2024 held out (76 eval pairs) |
 | schedule | 1 epoch, lr 1e-4 cosine with 5% warmup, effective batch 8, max 4,096 tokens, loss on the review only |
 | prompt | fixed system prompt + patch as user turn, Qwen chat template with thinking off (`<think></think>` empty) |
-| hardware | one NVIDIA GB10 (DGX Spark, 121 GB unified memory); peak 71.5 GB, ~163 tok/s, 3 h per epoch |
+| hardware | one NVIDIA GB10 (DGX Spark, 121 GB unified memory); peak 71.5 GB, ~163 tok/s, 3 h per epoch. One node on purpose: at this size a second node saves ~1.5 h and adds untested multi-node setup. v3 uses two (see `docs/PLAN-v3.md`, Phase 1) |
 
 System prompt, identical for training and evaluation:
 
