@@ -32,7 +32,12 @@ PERSON_ATTACKS = (
     "idiot",
     "idiocy",
     "moron",
-    "stupid",
+    # 'stupid' alone is a code-level word (see CODE_ATTACKS); aimed at a person
+    # it still drops the pair.
+    "you're stupid",
+    "you are stupid",
+    "are you stupid",
+    "stupid people",
     "dumb",
     "clueless",
     "clue",
@@ -52,6 +57,11 @@ PERSON_ATTACKS = (
 # Attacks on the code/patch. Scrubbable when the review also has substance.
 CODE_ATTACKS = (
     "garbage",
+    # Was a PERSON attack (always drop). At v3 volume it dropped 159 pairs on its
+    # own, and a sample showed it aimed at code, tools or himself ("This patch is
+    # just stupid", "my stupid longest-line.c program"). Nick's call, 2026-11-11:
+    # treat it like 'garbage': cut the sentence, keep the review.
+    "stupid",
     "crap",
     "crapware",
     "ugly",
@@ -74,6 +84,11 @@ CODE_ATTACKS = (
     "half-assed",
     "lazy",
 )
+
+# Code-level words whose sentence is always cut, even when it is aimed at the
+# code. (Other CODE_ATTACKS keep a code-directed sentence when nothing else is
+# left of it: "this interface is insane" can be the review's point.)
+ALWAYS_CUT = ("stupid",)
 
 _CLAUSE_SPLIT_RE = re.compile(r"[,;]|\bbut\b|\band then\b")
 _SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?])(?:\s+|$)|\n\s*\n")
@@ -177,7 +192,10 @@ def classify(review: str) -> Verdict:
             for c in _CLAUSE_SPLIT_RE.split(sentence)
             if c.strip() and not _hits(c, CODE_ATTACKS)
         ]
-        if not clauses and targets_code(sentence):
+        always_cut = _hits(sentence, CODE_ATTACKS) and any(
+            h in ALWAYS_CUT for h in _hits(sentence, CODE_ATTACKS)
+        )
+        if not clauses and targets_code(sentence) and not always_cut:
             kept.append(sentence + sep)  # abuse aimed at the code, and it is the point
         elif clauses:
             kept.append(", ".join(clauses) + sep)

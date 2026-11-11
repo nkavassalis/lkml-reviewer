@@ -217,6 +217,12 @@ applied in `ReviewPair.as_sft()` — never to the corpus on disk, so the transfo
 stays reversible. The regex requires the domain to start *and* end with `x`, which
 is what keeps `a@xxxxxx.com` (a real-looking placeholder) from being eaten.
 
+**`stupid` is code-level, and always cut (2026-11-11, Nick's call).** It used to
+be a person attack that dropped the whole pair: 159 v3 pairs for that word
+alone, mostly aimed at code or tools. Now its sentence is cut and the review
+kept; "you're stupid" / "stupid people" still drop. Unlike other code-level
+words, a code-directed `stupid` sentence is never kept (`ALWAYS_CUT`).
+
 **Abuse is dropped, never rewritten.** `moderate.py` is a vocabulary heuristic with
 three outcomes: `keep`, `scrub` (cut abusive sentences/clauses — the surviving
 prose is byte-identical to his, there is a test for exactly that), and `drop`

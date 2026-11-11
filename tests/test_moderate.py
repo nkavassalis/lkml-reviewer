@@ -134,3 +134,14 @@ def test_scrub_keeps_code_indentation_and_line_breaks():
     assert v.action == "scrub"
     assert "garbage" not in v.review
     assert v.review == "No, I'd suggest this:\n\n" + code + "\n" + TECH
+
+
+def test_stupid_about_code_is_scrubbed_not_dropped():
+    v = classify("This patch is just stupid. " + TECH)
+    assert v.action == "scrub"
+    assert "stupid" not in v.review and "drop the mutex" in v.review
+
+
+@pytest.mark.parametrize("insult", ["you're stupid", "you are stupid", "stupid people"])
+def test_stupid_aimed_at_a_person_still_drops(insult):
+    assert classify(TECH + f" Honestly, {insult}.").action == "drop"
