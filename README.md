@@ -13,6 +13,8 @@ worked, what didn't, and the bugs that nearly poisoned the data.
 - **Next iteration:** [`docs/PLAN-v3.md`](docs/PLAN-v3.md)
 - **Design decisions, invariants, measured numbers:** [`AGENTS.md`](AGENTS.md)
 - **Where the work stopped:** [`HANDOFF.md`](HANDOFF.md)
+- **Reusable version for other datasets:** [finetune-27b-template](https://github.com/nkavassalis/finetune-27b-template),
+  the generalised pipeline (config-driven training, evaluation, Mac conversion, operations)
 
 Not included: the corpus, the training data, or the model weights. They're
 other people's words and a derived model, and everything here rebuilds them.
