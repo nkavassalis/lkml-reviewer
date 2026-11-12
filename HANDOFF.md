@@ -109,6 +109,20 @@ checkpoints with optimizer state, the off-cluster watcher, and an hourly status
 run (`scripts/status.sh`, hosts in a gitignored `.status.env`, scheduled with
 a session cron job). The run-3 freeze is written up there.
 
+## 4c. After v3 finishes (agreed with Nick, 2026-11-12)
+
+1. Confirm vLLM serves again on both nodes.
+2. Score + judge v3 vs v2 vs base on the fixed 100 held-out (sampled); score
+   both adapters' eval loss on v3's eval set (the only like-for-like loss).
+3. Release checks on v3 generations: "Linus" sign-offs, email addresses,
+   named people. Report the rates on the card.
+4. Merge check on a GPU node; convert v3 to MLX 8-bit; Mac-vs-CUDA quality gate.
+5. Publish **publicly**, Apache-2.0: `nkavassalis/lkml-reviewer-lora` (adapter)
+   and `nkavassalis/lkml-reviewer-mlx-8bit` (only if it passes step 4). The card
+   leads with "work in progress, use at your own risk" and "not affiliated
+   with or endorsed by Linus Torvalds", and links this repo and the template.
+   Show Nick the final card first.
+
 ## 5. Next actions
 
 Follow `docs/PLAN-v3.md`: Phase 0 (data), then a 2-node data-parallel smoke test,
