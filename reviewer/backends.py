@@ -2,7 +2,7 @@
 import, so the gh/prompt layers (and their tests) need nothing but the stdlib.
 
   cuda   transformers + peft on an NVIDIA GPU (BF16, or 4-bit with --load-in-4bit)
-  mlx    Apple silicon. Planned after v3 (see reviewer/README.md); not yet built.
+  mlx    Apple silicon via mlx-lm, on a merged + quantized model (docs/CONVERSION.md)
 """
 from __future__ import annotations
 
@@ -84,9 +84,63 @@ class CudaBackend:
         return [t.strip() for t in out]
 
 
-def load_backend(name: str, adapter: str, **kwargs):
+class MlxBackend:
+    """Apple silicon via mlx-lm. Takes an already-converted MLX model: for
+    lkml-reviewer that's the LoRA *merged into* the base, then quantized
+    (docs/CONVERSION.md), so there is no separate adapter at inference time."""
+
+    def __init__(self, model: str, *, max_new_tokens: int = 1024, seed: int | None = None,
+                 **_ignored) -> None:
+        try:
+            import mlx.core as mx
+            from mlx_lm import load
+            from mlx_lm.sample_utils import make_logits_processors, make_sampler
+        except ImportError as e:
+            raise BackendError(
+                f"missing inference dependency ({e.name}): "
+                "pipx inject lkml-reviewer mlx-lm  (Apple silicon only)") from e
+        self.mx = mx
+        try:
+            self.model, self.tok = load(model)
+        except Exception as e:  # noqa: BLE001  (bad path, bad repo id, unsupported arch)
+            raise BackendError(f"could not load the MLX model {model!r}: {e}") from e
+        self.sampler = make_sampler(temp=SAMPLING["temperature"], top_p=SAMPLING["top_p"])
+        self.processors = make_logits_processors(
+            repetition_penalty=SAMPLING["repetition_penalty"])
+        self.max_new_tokens = max_new_tokens
+        self.seed = seed
+        self.stats: list[dict] = []
+
+    def generate(self, users: list[str], *, batch: int = 1) -> list[str]:
+        from mlx_lm import stream_generate  # noqa: PLC0415
+
+        out = []
+        for i, u in enumerate(users):
+            if self.seed is not None:
+                self.mx.random.seed(self.seed + i)
+            prompt = prompt_text(self.tok, u)
+            text, last = "", None
+            for last in stream_generate(self.model, self.tok, prompt,
+                                        max_tokens=self.max_new_tokens, sampler=self.sampler,
+                                        logits_processors=self.processors):
+                text += last.text
+            if last is not None:
+                self.stats.append({"prompt_tokens": last.prompt_tokens,
+                                   "prompt_tps": last.prompt_tps,
+                                   "generation_tokens": last.generation_tokens,
+                                   "generation_tps": last.generation_tps,
+                                   "peak_memory_gb": last.peak_memory})
+            out.append(text.strip())
+        return out
+
+
+def load_backend(name: str, adapter: str | None, *, model: str | None = None, **kwargs):
     if name == "cuda":
+        if not adapter:
+            raise BackendError("the cuda backend needs --adapter")
         return CudaBackend(adapter, **kwargs)
     if name == "mlx":
-        raise BackendError("the mlx (Apple silicon) backend is planned after v3; see reviewer/README.md")
+        if not model:
+            raise BackendError("the mlx backend needs --model (a converted MLX model dir or HF id)")
+        return MlxBackend(model, **kwargs)
     raise BackendError(f"unknown backend {name!r} (cuda or mlx)")

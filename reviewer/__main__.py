@@ -50,6 +50,7 @@ def gather(args) -> tuple[str, str, str, str]:
             pr = gh.fetch_pr(args.pr, args.repo)
         except gh.GhError as e:
             die(str(e), EXIT_GH)
+        args.pr_obj = pr
         return pr.title, pr.body, pr.author, pr.diff
     if args.diff_file:
         try:
@@ -77,17 +78,29 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--base", default="origin/main", help="base ref for --local")
     ap.add_argument("--title", help="subject line for --diff-file / --local")
     ap.add_argument("--adapter", default=os.environ.get("LKML_REVIEWER_ADAPTER"),
-                    help="LoRA adapter dir or HF repo id (or $LKML_REVIEWER_ADAPTER)")
-    ap.add_argument("--backend", default="cuda", choices=["cuda", "mlx"])
+                    help="cuda: LoRA adapter dir or HF repo id (or $LKML_REVIEWER_ADAPTER)")
+    ap.add_argument("--model", default=os.environ.get("LKML_REVIEWER_MODEL"),
+                    help="mlx: converted MLX model dir or HF id (or $LKML_REVIEWER_MODEL)")
+    ap.add_argument("--backend", default=os.environ.get("LKML_REVIEWER_BACKEND", "cuda"),
+                    choices=["cuda", "mlx"])
     ap.add_argument("--load-in-4bit", action="store_true", help="NF4 base (~22 GB GPU)")
     ap.add_argument("--per-file", action="store_true",
                     help="review each changed file separately (big PRs get truncated otherwise)")
     ap.add_argument("--max-new-tokens", type=int, default=1024)
     ap.add_argument("--seed", type=int, default=None)
     ap.add_argument("--dry-run", action="store_true", help="print the prompt(s); load no model")
-    ap.add_argument("--post", action="store_true", help="post the review as a PR comment")
-    ap.add_argument("--yes", action="store_true", help="post without the confirmation prompt")
+    ap.add_argument("--stats", action="store_true", help="print speed and memory (mlx)")
+    mode = ap.add_argument_group("output mode (default: print to the terminal only)")
+    mode.add_argument("--post", action="store_true", help="post the review as a PR comment")
+    mode.add_argument("--live", action="store_true",
+                      help="submit a real review that APPROVES or REQUESTS CHANGES (your repos only)")
+    mode.add_argument("--verdict", choices=["approve", "request-changes", "comment"],
+                      help="override the verdict --live infers from the review text")
+    mode.add_argument("--allow-repo", action="append", default=[],
+                      help="owner/name where --live may act although you don't own it (repeatable)")
+    mode.add_argument("--yes", action="store_true", help="skip the confirmation prompt")
     args = ap.parse_args(argv)
+    args.pr_obj = None
 
     if args.version:
         from . import __version__  # noqa: PLC0415
@@ -97,14 +110,30 @@ def main(argv: list[str] | None = None) -> int:
         from .doctor import run  # noqa: PLC0415
         return run(args.adapter)
 
-    if args.post and args.pr is None:
-        die("--post needs --pr", EXIT_INPUT)
-    if not args.dry_run and not args.adapter:
-        die("no adapter: pass --adapter or set LKML_REVIEWER_ADAPTER", EXIT_INPUT)
+    if (args.post or args.live) and args.pr is None:
+        die("--post and --live need --pr", EXIT_INPUT)
+    if args.post and args.live:
+        die("choose one of --post (comment) and --live (approve / request changes)", EXIT_INPUT)
+    if args.verdict and not args.live:
+        die("--verdict only applies to --live", EXIT_INPUT)
+    if not args.dry_run:
+        if args.backend == "cuda" and not args.adapter:
+            die("no adapter: pass --adapter or set LKML_REVIEWER_ADAPTER", EXIT_INPUT)
+        if args.backend == "mlx" and not args.model:
+            die("no model: pass --model (a converted MLX model) or set LKML_REVIEWER_MODEL",
+                EXIT_INPUT)
 
     title, body, author, diff = gather(args)
     if not diff.strip():
         die("the diff is empty: nothing to review", EXIT_INPUT)
+    if args.live:
+        # Before the model loads: a refusal should cost seconds, not a model load.
+        allow = args.allow_repo + [r for r in os.environ.get(
+            "LKML_REVIEWER_ALLOW_REPOS", "").split(",") if r]
+        try:
+            target = gh.check_live_allowed(args.pr_obj, args.repo, allow)
+        except gh.GhError as e:
+            die(str(e), EXIT_GH)
 
     if args.per_file:
         units = [(path, *pr_input(f"{title} ({path})", d, body=body, author=author))
@@ -126,11 +155,17 @@ def main(argv: list[str] | None = None) -> int:
     from .backends import BackendError, load_backend  # noqa: PLC0415  (heavy, and last)
 
     try:
-        backend = load_backend(args.backend, args.adapter, load_in_4bit=args.load_in_4bit,
+        backend = load_backend(args.backend, args.adapter, model=args.model,
+                               load_in_4bit=args.load_in_4bit,
                                max_new_tokens=args.max_new_tokens, seed=args.seed)
         reviews = backend.generate([u for _, u, _ in units])
     except BackendError as e:
         die(str(e), EXIT_BACKEND)
+    if args.stats:
+        for st in getattr(backend, "stats", []):
+            print(f"stats: prompt {st['prompt_tokens']} tok @ {st['prompt_tps']:.0f} tok/s, "
+                  f"generated {st['generation_tokens']} tok @ {st['generation_tps']:.1f} tok/s, "
+                  f"peak memory {st['peak_memory_gb']:.1f} GB", file=sys.stderr)
 
     parts = []
     for (path, _, _), review in zip(units, reviews, strict=True):
@@ -138,19 +173,30 @@ def main(argv: list[str] | None = None) -> int:
     text = "\n\n".join(parts)
     print(text)
 
-    if args.post:
+    if args.post or args.live:
+        if args.live:
+            from .verdict import infer  # noqa: PLC0415
+            guess = infer(text)
+            event = args.verdict or guess.event
+            why = "set by --verdict" if args.verdict else guess.reason
+            question = f"\nSubmit a review that will {event.upper()} PR #{args.pr} in {target} ({why})? [y/N] "
+        else:
+            question = f"\nPost this as a comment on PR #{args.pr}? [y/N] "
         if not args.yes:
             if not sys.stdin.isatty():
-                die("refusing to post without confirmation on a non-interactive stdin; "
-                    "add --yes", EXIT_INPUT)
-            if input(f"\nPost this as a comment on PR #{args.pr}? [y/N] ").strip().lower() != "y":
-                print("not posted.")
+                die("refusing to act on GitHub without confirmation on a non-interactive "
+                    "stdin; add --yes", EXIT_INPUT)
+            if input(question).strip().lower() != "y":
+                print("nothing sent.")
                 return 0
         try:
-            gh.post_review(args.pr, DISCLAIMER + text, args.repo)
+            if args.live:
+                gh.submit_review(args.pr, DISCLAIMER + text, event, args.repo)
+            else:
+                gh.post_review(args.pr, DISCLAIMER + text, args.repo)
         except gh.GhError as e:
             die(str(e), EXIT_GH)
-        print(f"posted to PR #{args.pr}.")
+        print(f"{'submitted ' + event + ' review' if args.live else 'posted'} on PR #{args.pr}.")
     return 0
 
 

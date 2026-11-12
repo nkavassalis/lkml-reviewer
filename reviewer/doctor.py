@@ -83,6 +83,25 @@ def check_inference() -> list[Check]:
     return out
 
 
+def check_mlx() -> list[Check]:
+    """Apple silicon: mlx installed, and how much memory the GPU may wire."""
+    if sys.platform != "darwin":
+        return []
+    if not _has("mlx_lm"):
+        return [Check("mlx", WARN, "mlx-lm not installed",
+                      "scripts/install-reviewer.sh --mlx  (or pipx inject lkml-reviewer mlx-lm)")]
+    try:
+        import mlx.core as mx
+        info = mx.device_info() if hasattr(mx, "device_info") else mx.metal.device_info()
+        gb = info["max_recommended_working_set_size"] / 1e9
+    except Exception as e:  # noqa: BLE001
+        return [Check("mlx", FAIL, f"mlx import failed: {e}")]
+    status = OK if gb >= 35 else WARN
+    return [Check("mlx", status, f"GPU may wire {gb:.0f} GB (8-bit 27B needs ~32 GB at 4k context)",
+                  "" if status == OK else
+                  "raise it: sudo sysctl iogpu.wired_limit_mb=<MB>  (resets on reboot)")]
+
+
 def check_adapter(adapter: str | None) -> Check:
     if not adapter:
         return Check("adapter", WARN, "none given",
@@ -102,7 +121,9 @@ def check_adapter(adapter: str | None) -> Check:
 
 
 def run(adapter: str | None) -> int:
-    checks = [check_python(), *check_gh(), *check_inference(), check_adapter(adapter)]
+    on_mac = sys.platform == "darwin"
+    engine = check_mlx() if on_mac else check_inference()
+    checks = [check_python(), *check_gh(), *engine] + ([] if on_mac else [check_adapter(adapter)])
     width = max(len(c.name) for c in checks)
     for c in checks:
         mark = {"ok": "✓", "warn": "!", "FAIL": "✗"}[c.status]
@@ -112,7 +133,7 @@ def run(adapter: str | None) -> int:
     failed = [c for c in checks if c.status == FAIL]
     can_dry_run = check_python().status == OK
     can_review = can_dry_run and not any(
-        c.status != OK for c in checks if c.name in ("inference libs", "cuda", "gpu", "adapter"))
+        c.status != OK for c in checks if c.name in ("inference libs", "cuda", "gpu", "adapter", "mlx"))
     print()
     print(f"  dry runs (--dry-run):       {'ready' if can_dry_run else 'not ready'}")
     print(f"  reviews on this machine:    {'ready' if can_review else 'not ready (see above)'}")

@@ -6,6 +6,7 @@ tests exercise the actual subprocess and error-mapping code. No network, no GPU.
 from __future__ import annotations
 
 import ast
+import io
 import json
 import os
 import stat
@@ -53,6 +54,10 @@ if a[:2] == ["pr", "view"]:
     print(os.environ["FAKE_GH_PR"]); sys.exit(0)
 if a[:2] == ["pr", "diff"]:
     print(os.environ["FAKE_GH_DIFF"], end=""); sys.exit(0)
+if a[:2] == ["api", "user"]:
+    print(os.environ.get("FAKE_GH_LOGIN", "alice")); sys.exit(0)
+if a[:2] == ["repo", "view"]:
+    print(os.environ.get("FAKE_GH_REPO", "alice/r")); sys.exit(0)
 if a[:2] == ["pr", "review"]:
     if mode == "readonly":
         print("GraphQL: Resource not accessible by personal access token (addPullRequestReview)", file=sys.stderr); sys.exit(1)
@@ -273,3 +278,117 @@ def test_pyproject_entry_point_and_packages():
     assert cfg["project"]["scripts"]["lkml-reviewer"] == "reviewer.__main__:main"
     assert set(cfg["tool"]["setuptools"]["packages"]) >= {"reviewer", "linuspr"}
     assert cfg["project"]["dependencies"] == []      # the core stays stdlib-only
+
+
+# --- verdicts and --live -------------------------------------------------------
+
+@pytest.mark.parametrize("text,event", [
+    ("NAK. This breaks the RCU walk.", "request-changes"),
+    ("No, please don't do this. Use the existing helper.", "request-changes"),
+    ("I'm not taking this. End of discussion.", "request-changes"),
+    ("Ack. Looks good to me.", "approve"),
+    ("Looks sane. I'll apply it directly.", "approve"),
+    ("Ack on the idea, but this is wrong: the lock is dropped too early.", "comment"),
+    ("I wonder whether we need the second barrier here at all?", "comment"),
+])
+def test_verdict_inference(text, event):
+    from reviewer.verdict import infer
+    assert infer(text).event == event
+
+
+class FakeBackend:
+    def __init__(self, text):
+        self.text, self.stats = text, []
+
+    def generate(self, users, **_):
+        return [self.text for _ in users]
+
+
+@pytest.fixture
+def fake_model(monkeypatch):
+    def install(text):
+        import reviewer.backends as b
+        monkeypatch.setattr(b, "load_backend", lambda *a, **k: FakeBackend(text))
+    return install
+
+
+def test_live_refuses_repos_you_dont_own_before_loading_any_model(fake_gh, fake_model, capsys):
+    fake_model("NAK.")
+    with pytest.raises(SystemExit) as e:
+        main(["--pr", "7", "--repo", "someone/else", "--adapter", "x", "--live", "--yes"])
+    assert e.value.code == 2 and "isn't owned by your account" in capsys.readouterr().err
+    assert not any(c["args"][:2] == ["pr", "review"] for c in fake_gh())
+
+
+def test_live_refuses_your_own_pr(fake_gh, fake_model, capsys):
+    fake_model("NAK.")
+    with pytest.raises(SystemExit) as e:
+        main(["--pr", "7", "--repo", "alice/r", "--adapter", "x", "--live", "--yes"])
+    assert e.value.code == 2 and "your own" in capsys.readouterr().err
+
+
+def _pr_by(monkeypatch, login):
+    monkeypatch.setenv("FAKE_GH_PR", json.dumps(PR_JSON | {"author": {"login": login}}))
+
+
+def test_live_request_changes_on_your_repo(fake_gh, fake_model, monkeypatch, capsys):
+    _pr_by(monkeypatch, "bob")
+    fake_model("NAK. This breaks the RCU walk.")
+    assert main(["--pr", "7", "--repo", "alice/r", "--adapter", "x", "--live", "--yes"]) == 0
+    review = next(c for c in fake_gh() if c["args"][:2] == ["pr", "review"])
+    assert "--request-changes" in review["args"]
+    assert review["stdin"].startswith(DISCLAIMER) and "RCU walk" in review["stdin"]
+
+
+def test_live_on_someone_elses_repo_needs_allow_repo(fake_gh, fake_model, monkeypatch):
+    _pr_by(monkeypatch, "bob")
+    fake_model("Ack. Looks good.")
+    assert main(["--pr", "7", "--repo", "org/proj", "--adapter", "x", "--live", "--yes",
+                 "--allow-repo", "org/proj"]) == 0
+    review = next(c for c in fake_gh() if c["args"][:2] == ["pr", "review"])
+    assert "--approve" in review["args"]
+
+
+def test_verdict_override(fake_gh, fake_model, monkeypatch):
+    _pr_by(monkeypatch, "bob")
+    fake_model("Ack. Looks good.")
+    assert main(["--pr", "7", "--repo", "alice/r", "--adapter", "x", "--live", "--yes",
+                 "--verdict", "comment"]) == 0
+    review = next(c for c in fake_gh() if c["args"][:2] == ["pr", "review"])
+    assert "--comment" in review["args"] and "--approve" not in review["args"]
+
+
+def test_live_without_a_tty_needs_yes(fake_gh, fake_model, monkeypatch, capsys):
+    _pr_by(monkeypatch, "bob")
+    fake_model("NAK.")
+    monkeypatch.setattr(sys, "stdin", io.StringIO(""))  # not a tty
+    with pytest.raises(SystemExit) as e:
+        main(["--pr", "7", "--repo", "alice/r", "--adapter", "x", "--live"])
+    assert e.value.code == 4
+    assert not any(c["args"][:2] == ["pr", "review"] for c in fake_gh())
+
+
+def test_print_mode_never_touches_github_writes(fake_gh, fake_model, capsys):
+    fake_model("NAK. This is wrong.")
+    assert main(["--pr", "7", "--repo", "alice/r", "--adapter", "x"]) == 0
+    assert "This is wrong" in capsys.readouterr().out
+    assert not any(c["args"][:2] == ["pr", "review"] for c in fake_gh())
+
+
+@pytest.mark.parametrize("argv", [
+    ["--post", "--live"],
+    ["--verdict", "approve"],
+])
+def test_mode_flag_conflicts(fake_gh, argv):
+    with pytest.raises(SystemExit) as e:
+        main(["--pr", "7", "--repo", "alice/r", "--adapter", "x", *argv])
+    assert e.value.code == 4
+
+
+def test_mlx_backend_needs_a_model(tmp_path, monkeypatch):
+    monkeypatch.delenv("LKML_REVIEWER_MODEL", raising=False)
+    f = tmp_path / "x.patch"
+    f.write_text(DIFF)
+    with pytest.raises(SystemExit) as e:
+        main(["--diff-file", str(f), "--backend", "mlx"])
+    assert e.value.code == 4

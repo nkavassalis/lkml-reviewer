@@ -59,6 +59,8 @@ def _explain(stderr: str, what: str) -> str:
         return f"{what}: repository not found, or no access to it (check --repo owner/name)"
     if "no git remotes" in low or "not a git repository" in low or "none of the git remotes" in low:
         return f"{what}: not inside a GitHub checkout, so pass --repo owner/name"
+    if "your own pull request" in low:
+        return f"{what}: GitHub doesn't allow approving or requesting changes on your own PR"
     if "403" in low or "resource not accessible" in low or "must have" in low:
         return f"{what}: permission denied (your token can read but not write here?)"
     if "rate limit" in low:
@@ -110,6 +112,60 @@ def fetch_pr(number: int, repo: str | None = None, *, gh: str = "gh") -> PullReq
         files=[f.get("path", "") for f in meta.get("files") or []],
         diff=d.stdout,
     )
+
+
+def whoami(*, gh: str = "gh") -> str:
+    """The authenticated login (works for keyring logins and GH_TOKEN alike)."""
+    r = _gh(["api", "user", "--jq", ".login"], gh=gh)
+    if r.returncode != 0 or not r.stdout.strip():
+        raise GhError(_explain(r.stderr, "looking up your GitHub login"))
+    return r.stdout.strip()
+
+
+def repo_owner(repo: str | None, *, gh: str = "gh") -> str:
+    """owner/name of --repo, or of the current checkout's GitHub remote."""
+    if repo:
+        return repo
+    r = _gh(["repo", "view", "--json", "nameWithOwner", "--jq", ".nameWithOwner"], gh=gh)
+    if r.returncode != 0:
+        raise GhError(_explain(r.stderr, "finding this checkout's repository"))
+    return r.stdout.strip()
+
+
+def check_live_allowed(pr: PullRequest, repo: str | None, allow: list[str],
+                       *, gh: str = "gh") -> str:
+    """Refuse a verdict-bearing review unless the repo is yours or allowlisted.
+
+    A live review approves or requests changes on someone's PR under your name.
+    Testing that on other people's repositories is exactly the accident this
+    guard exists to prevent. Returns the owner/name it checked.
+    """
+    me = whoami(gh=gh)
+    full = repo_owner(repo, gh=gh)
+    owner = full.split("/")[0]
+    if owner.lower() != me.lower() and full.lower() not in {a.lower() for a in allow}:
+        raise GhError(
+            f"refusing --live on {full}: it isn't owned by your account ({me}). "
+            f"Pass --allow-repo {full} if you really mean to review there, "
+            "or use --post (comment only) / the default print mode")
+    if pr.author.lower() == me.lower():
+        raise GhError(
+            f"PR #{pr.number} is your own, and GitHub doesn't let anyone approve or "
+            "request changes on their own PR. Use --post for a comment, or test --live "
+            "on a PR opened by another account")
+    return full
+
+
+def submit_review(number: int, body: str, event: str, repo: str | None = None,
+                  *, gh: str = "gh") -> None:
+    """Submit a review with a verdict: approve, request-changes, or comment."""
+    flag = {"approve": "--approve", "request-changes": "--request-changes",
+            "comment": "--comment"}[event]
+    check_auth(gh=gh)
+    r = _gh(["pr", "review", str(number), *_repo_args(repo), flag, "--body-file", "-"],
+            stdin=body, gh=gh)
+    if r.returncode != 0:
+        raise GhError(_explain(r.stderr, f"submitting a review on PR #{number}"))
 
 
 def post_review(number: int, body: str, repo: str | None = None, *, gh: str = "gh") -> None:

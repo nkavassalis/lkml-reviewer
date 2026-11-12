@@ -6,6 +6,7 @@
 #   scripts/install-reviewer.sh                  # from a checkout (installs that checkout)
 #   scripts/install-reviewer.sh --core           # no inference libraries (dry runs, gh only)
 #   scripts/install-reviewer.sh --cuda           # force the CUDA extras
+#   scripts/install-reviewer.sh --mlx            # force the Apple-silicon (mlx) extras
 #   scripts/install-reviewer.sh --torch-index https://download.pytorch.org/whl/cu130
 #   scripts/install-reviewer.sh --print          # show what it would run, do nothing
 #
@@ -19,6 +20,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --core) mode=core ;;
     --cuda) mode=cuda ;;
+    --mlx) mode=mlx ;;
     --torch-index) torch_index="${2:?--torch-index needs a URL}"; shift ;;
     --from) src="${2:?--from needs a path or URL}"; shift ;;
     --print) dry=1 ;;
@@ -65,9 +67,8 @@ if [ $mode = auto ]; then
     mode=cuda
     say "NVIDIA GPU found: $(nvidia-smi -L | head -1)"
   elif [ "$os" = Darwin ] && [ "$arch" = arm64 ]; then
-    mode=core
-    say "Apple silicon: installing the core CLI. The mlx backend for local reviews is"
-    say "planned after v3; until then this Mac can do --dry-run and gh, not generate."
+    mode=mlx
+    say "Apple silicon: installing with the mlx backend."
   else
     mode=core
     say "No NVIDIA GPU found: installing the core CLI (dry runs and gh only)."
@@ -75,7 +76,9 @@ if [ $mode = auto ]; then
 fi
 spec="$src"
 [ $mode = cuda ] && spec="lkml-reviewer[cuda] @ $src"
+[ $mode = mlx ] && spec="lkml-reviewer[mlx] @ $src"
 [ "$src" != "$REPO_URL" ] && [ $mode = cuda ] && spec="$src[cuda]"
+[ "$src" != "$REPO_URL" ] && [ $mode = mlx ] && spec="$src[mlx]"
 
 # --- install ---------------------------------------------------------------
 say "installing: $spec"

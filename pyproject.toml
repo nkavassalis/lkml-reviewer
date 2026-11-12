@@ -26,8 +26,8 @@ cuda = [
     "flash-linear-attention==0.6.0",
 ]
 cuda-4bit = ["lkml-reviewer[cuda]", "bitsandbytes"]
-# Apple silicon: reserved for the mlx backend (planned after v3; see README).
-mlx = []
+# Apple silicon: the mlx backend, on a merged + quantized model (docs/CONVERSION.md).
+mlx = ["mlx-lm==0.32.2"]
 
 [project.scripts]
 lkml-reviewer = "reviewer.__main__:main"
