@@ -58,7 +58,7 @@ fi
 mlx="$out/mlx-${bits}bit"
 say "converting to MLX ${bits}-bit (group $group) -> $mlx"
 rm -rf "$mlx"
-"$PY" -m mlx_lm.convert --hf-path "$merged" --mlx-path "$mlx" -q --q-bits "$bits" \
+"$PY" -m mlx_lm convert --hf-path "$merged" --mlx-path "$mlx" -q --q-bits "$bits" \
   --q-group-size "$group"
 [ -f "$merged/MERGE_INFO.json" ] && cp "$merged/MERGE_INFO.json" "$mlx/"
 say "converted: $(du -sh "$mlx" | cut -f1)"

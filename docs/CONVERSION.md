@@ -118,5 +118,22 @@ installed with `scripts/install-reviewer.sh` (pipx, `[mlx]` extra):
 | prompt processing | — | 74 tok/s |
 | wall time incl. model load, 277-token review | — | 53 s |
 
-The 8-bit 27B fits with ~26 GB of the wired limit to spare. Next entry: our
-merged adapter through the full pipeline, and the §6 quality gate.
+The 8-bit 27B fits with ~26 GB of the wired limit to spare.
+
+**2026-11-12, v2 adapter through the full pipeline** (`scripts/convert-mlx.sh
+--adapter v2-adapter --bits 8`, on the Mac itself, from the BF16 base in the
+HF cache):
+
+| step | result |
+| --- | --- |
+| merge (`merge_lora.py`) | **400 / 400 modules**, scale 2.0 (α 32 / r 16), ~2 min for 18 shards, CPU only |
+| convert (`mlx_lm convert -q --q-bits 8`) | 8.501 bits/weight, **27 GB** (vision tower dropped; the stock 8-bit build is 29.5 GB), ~80 s |
+| smoke test | 8.5 tok/s, 28.9 GB peak |
+| review of a held-out 2024 patch | 101 tok/s prompt, **8.8 tok/s** generation, **30.2 GB peak** |
+
+Total from adapter to a working Mac model: under 4 minutes once the base is
+downloaded. On the held-out DEPT patch, the merged model answers in v2's
+voice (a terse, plain-text question about a disabled self-test, signed
+"Linus" because v2's targets kept the sign-off), where the stock base writes
+"This patch is garbage… Resend with: 1. 2. 3." The §6 quality gate (Mac vs
+CUDA on the same 100 held-out patches) runs with v3.
