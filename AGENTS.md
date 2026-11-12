@@ -39,7 +39,9 @@ data/           gitignored. raw/ = cached HTML, linus_messages.jsonl,
                 patch_texts.json, review_pairs.jsonl, sft.jsonl,
                 msgid_index.json, commit_subjects.json, git/linux.git, crawl-*.log
 tests/          hermetic tier only; fixtures/ holds REAL saved pages, not toy HTML
-scripts/        gate.sh, secret-scan.sh, crawl-all.sh
+scripts/        gate.sh, secret-scan.sh, crawl-all.sh, status.sh (read-only status
+                of a long run; hosts in gitignored .status.env), install-reviewer.sh,
+                convert-mlx.sh
 train/          fine-tune + evaluation; runs in a container on the GPU node, not
                 in .venv, and is outside the stdlib-only rule:
                 sft_lora.py (BF16 LoRA SFT), compare.py (base vs tuned generations),
@@ -52,7 +54,9 @@ reviewer/       review a GitHub PR / local diff with the LoRA: gh.py (stdlib, ev
                 backends.py (cuda now; mlx planned), __main__.py (CLI). See its README
 linuspr/template.py  the prompt format, shared by export and reviewer; a test fails
                 if train/sft_lora.py's copy drifts
-docs/           REPORT.md (results + learnings), PLAN-v3.md (next iteration),
+docs/           OPERATIONS.md (long jobs on shared machines: restore traps,
+                memory caps, resume, watcher + hourly status runs; read it before
+                any long run), REPORT.md (results + learnings), PLAN-v3.md,
                 CONVERSION.md (adapter -> merged BF16 -> MLX 8-bit; the standard
                 last stage for every model, targeting a 64 GB M4 Pro)
 HANDOFF.md      where the last session actually stopped — read it alongside this file

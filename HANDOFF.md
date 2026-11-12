@@ -102,6 +102,13 @@ stay comparable.
   it's aimed at code.
 - Mirror completeness is unverified against lore.
 
+## 4b. Running long jobs
+
+Follow `docs/OPERATIONS.md`: chain script with a restore trap, allocator cap,
+checkpoints with optimizer state, the off-cluster watcher, and an hourly status
+run (`scripts/status.sh`, hosts in a gitignored `.status.env`, scheduled with
+a session cron job). The run-3 freeze is written up there.
+
 ## 5. Next actions
 
 Follow `docs/PLAN-v3.md`: Phase 0 (data), then a 2-node data-parallel smoke test,

@@ -46,3 +46,6 @@ playwright-report/
 build/
 *.egg-info/
 dist/
+
+# local-only hosts for scripts/status.sh
+.status.env
