@@ -65,11 +65,14 @@ def gather(args) -> tuple[str, str, str, str]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(prog="python -m reviewer", description=__doc__.split("\n")[0])
+    ap = argparse.ArgumentParser(prog="lkml-reviewer", description=__doc__.split("\n")[0])
     src = ap.add_mutually_exclusive_group(required=True)
     src.add_argument("--pr", type=int, help="pull request number (uses gh)")
     src.add_argument("--diff-file", help="unified diff file, or - for stdin")
     src.add_argument("--local", action="store_true", help="review `git diff BASE...HEAD`")
+    src.add_argument("--doctor", action="store_true",
+                     help="check gh, inference libraries, GPU and adapter; say how to fix gaps")
+    src.add_argument("--version", action="store_true", help="print the version")
     ap.add_argument("--repo", help="owner/name (default: the current checkout's remote)")
     ap.add_argument("--base", default="origin/main", help="base ref for --local")
     ap.add_argument("--title", help="subject line for --diff-file / --local")
@@ -85,6 +88,14 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--post", action="store_true", help="post the review as a PR comment")
     ap.add_argument("--yes", action="store_true", help="post without the confirmation prompt")
     args = ap.parse_args(argv)
+
+    if args.version:
+        from . import __version__  # noqa: PLC0415
+        print(f"lkml-reviewer {__version__}")
+        return 0
+    if args.doctor:
+        from .doctor import run  # noqa: PLC0415
+        return run(args.adapter)
 
     if args.post and args.pr is None:
         die("--post needs --pr", EXIT_INPUT)

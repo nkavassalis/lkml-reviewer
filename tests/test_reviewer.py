@@ -237,3 +237,39 @@ def test_empty_diff_is_rejected(tmp_path):
 
 def test_disclaimer_says_it_is_not_linus():
     assert "not Linus Torvalds" in DISCLAIMER
+
+
+# --- doctor -------------------------------------------------------------------
+
+def test_doctor_adapter_checks(tmp_path):
+    from reviewer.doctor import FAIL, OK, WARN, check_adapter
+    assert check_adapter(None).status == WARN
+    assert check_adapter(str(tmp_path / "nope")).status == FAIL
+    half = tmp_path / "half"
+    half.mkdir()
+    (half / "adapter_config.json").write_text("{}")
+    assert check_adapter(str(half)).status == FAIL          # weights missing
+    (half / "adapter_model.safetensors").write_bytes(b"")
+    assert check_adapter(str(half)).status == OK
+    assert check_adapter("someone/lkml-reviewer-lora").status == OK   # HF id
+
+
+def test_doctor_reports_without_crashing_and_flags_failures(tmp_path, capsys):
+    from reviewer.doctor import run
+    assert run(None) == 0                       # warnings only: still exit 0
+    assert "dry runs (--dry-run):       ready" in capsys.readouterr().out
+    assert run(str(tmp_path / "missing")) == 1  # a FAIL is a non-zero exit
+
+
+def test_cli_version_and_doctor(capsys):
+    from reviewer import __version__
+    assert main(["--version"]) == 0 and __version__ in capsys.readouterr().out
+    assert main(["--doctor"]) in (0, 1)
+
+
+def test_pyproject_entry_point_and_packages():
+    import tomllib
+    cfg = tomllib.loads((ROOT / "pyproject.toml").read_text())
+    assert cfg["project"]["scripts"]["lkml-reviewer"] == "reviewer.__main__:main"
+    assert set(cfg["tool"]["setuptools"]["packages"]) >= {"reviewer", "linuspr"}
+    assert cfg["project"]["dependencies"] == []      # the core stays stdlib-only

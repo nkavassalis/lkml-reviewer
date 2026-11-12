@@ -1,0 +1,45 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lkml-reviewer"
+version = "0.1.0"
+description = "Review GitHub PRs and local diffs with a LoRA fine-tuned on Linus Torvalds' LKML reviews (an unofficial style imitation)"
+readme = "reviewer/README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.10"
+authors = [{ name = "Nick Kavassalis" }]
+# The core install is stdlib-only: gh handling, prompt building, --dry-run and
+# --doctor all work without any of the extras below.
+dependencies = []
+
+[project.optional-dependencies]
+# NVIDIA GPUs. Pinned to the versions the adapter was trained and evaluated
+# with. torch is left unpinned: pick the CUDA build for your machine (README).
+cuda = [
+    "torch>=2.13",
+    "transformers==5.19.0",
+    "peft==0.21.2",
+    "accelerate==1.15.0",
+    "flash-linear-attention==0.6.0",
+]
+cuda-4bit = ["lkml-reviewer[cuda]", "bitsandbytes"]
+# Apple silicon: reserved for the mlx backend (planned after v3; see README).
+mlx = []
+
+[project.scripts]
+lkml-reviewer = "reviewer.__main__:main"
+
+[project.urls]
+Homepage = "https://github.com/nkavassalis/lkml-reviewer"
+Report = "https://github.com/nkavassalis/lkml-reviewer/blob/main/docs/REPORT.md"
+
+[tool.setuptools]
+# linuspr ships too: reviewer's prompt format lives in linuspr/template.py,
+# shared with the training-data export so the two can't drift apart.
+packages = ["reviewer", "linuspr"]
+
+[tool.setuptools.package-data]
+reviewer = ["README.md", "requirements-cuda.txt"]
