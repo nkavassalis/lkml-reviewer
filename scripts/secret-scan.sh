@@ -64,7 +64,8 @@ for wl in "$WATCHLIST" "$REPO_WATCHLIST"; do
   done < "$wl"
 done
 
-mode="staged"; target=""
+mode="staged"; target=""; explicit=0
+case "${1:-}" in --staged|--worktree|--all|--range) explicit=1 ;; esac
 case "${1:-}" in
   --staged)   mode="staged"; shift ;;
   --worktree) mode="worktree"; shift ;;
@@ -86,8 +87,11 @@ scan() {  # $1 = label, $2 = command that emits "file:line:content"-ish text on 
 
 found=0
 SELF=':!scripts/secret-scan.sh'  # its own pattern list would match itself
+# Files given and no mode flag: scan just those files (the commit-msg hook passes
+# the message file; scanning the staged diff there checked the wrong thing).
+[ $# -gt 0 ] && [ $explicit = 0 ] && mode="files"
 case "$mode" in
-  staged)   scan "staged diff"  git diff --cached -U0 ;;
+  staged)   scan "staged diff"  git diff --cached -U0 -- . "$SELF" ;;
   range)    scan "$target"      git diff -U0 "$target" -- . "$SELF" ;;
   worktree) scan "tracked files" git grep -nE -- "$(IFS='|'; echo "${PATTERNS[*]}")" -- . "$SELF" ;;
   all)      scan "all tracked"  git grep -nE -- "$(IFS='|'; echo "${PATTERNS[*]}")" -- . "$SELF" ;;
