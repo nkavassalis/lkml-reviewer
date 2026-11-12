@@ -86,7 +86,11 @@ fi
 say "training done"
 
 if [ -n "$EVAL_ARMS_MASTER" ]; then
-  # The peer needs the new adapter for its arms.
+  # The peer needs the new adapter for its arms. The container writes as root
+  # with owner-only permissions, so hand the outputs back before copying: on
+  # lkml-reviewer run-3 the scp below failed on a -rw------- root file and the
+  # chain stopped before evaluation.
+  docker exec "$TRAIN_CTR" chown -R "$(id -u):$(id -g)" /work >> "$LOG" 2>&1
   scp -q -r "$WORK/$RUN/adapter-final" "$PEER:$(basename "$WORK")/$RUN-adapter-final"
   say "evaluating: master arms [$EVAL_ARMS_MASTER], peer arms [$EVAL_ARMS_PEER]"
   cmp_cmd() {  # $1 = arms, $2 = adapters, $3 = out file
