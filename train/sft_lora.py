@@ -19,10 +19,16 @@ import time
 from datetime import timedelta
 from pathlib import Path
 
-import torch
-import torch.distributed as dist
-from peft import LoraConfig, get_peft_model
-from transformers import AutoModelForImageTextToText, AutoTokenizer
+# Must be set before CUDA initialises. Reduces allocator fragmentation, which on
+# GB10 unified memory is taken straight out of system RAM: run-3's rank 0 froze
+# the whole node (sshd "no more sessions") with only 72 GB *allocated*.
+os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
+
+import torch  # noqa: E402
+import torch.distributed as dist  # noqa: E402
+from peft import LoraConfig, get_peft_model, set_peft_model_state_dict  # noqa: E402
+from safetensors.torch import load_file  # noqa: E402
+from transformers import AutoModelForImageTextToText, AutoTokenizer  # noqa: E402
 
 SYSTEM = (
     "You are reviewing a patch posted to the Linux kernel mailing list. "
@@ -104,11 +110,15 @@ def load(path: str, tok, max_len: int, limit: int | None):
 
 
 @torch.no_grad()
-def eval_loss(model, data) -> tuple[float, int]:
-    """Token-weighted eval loss; each rank takes every WORLD-th example."""
+def eval_loss(model, data, fh=None) -> tuple[float, int]:
+    """Token-weighted eval loss; each rank takes every WORLD-th example.
+    Logs progress so a 25-minute eval is distinguishable from a hang."""
     model.eval()
     total, ntok = 0.0, 0
-    for ids, labels, _ in data[RANK::WORLD]:
+    shard = data[RANK::WORLD]
+    for i, (ids, labels, _) in enumerate(shard, 1):
+        if fh is not None and i % 100 == 0:
+            log(fh, f"  eval {i}/{len(shard)} (rank 0 shard)")
         ids, labels = ids[None].cuda(), labels[None].cuda()
         n = int((labels[:, 1:] != -100).sum())
         total += model(input_ids=ids, labels=labels).loss.float().item() * n
@@ -150,16 +160,31 @@ def main() -> None:
     ap.add_argument("--seed", type=int, default=7)
     ap.add_argument("--save-every", type=int, default=0,
                     help="also save the adapter every N steps (crash insurance)")
+    ap.add_argument("--mem-fraction", type=float, default=0.75,
+                    help="cap PyTorch's allocator at this fraction of device memory. On "
+                         "unified memory this is what turns a node-wide freeze into a "
+                         "catchable CUDA OOM (and so a clean exit + restore)")
+    ap.add_argument("--resume-from", default=None,
+                    help="adapter dir from a previous run (adapter-latest)")
+    ap.add_argument("--resume-step", type=int, default=0,
+                    help="optimizer step that adapter was saved at")
+    ap.add_argument("--base-eval-loss", type=float, default=None,
+                    help="skip the before-training eval and report this value instead")
     args = ap.parse_args()
     if DISTRIBUTED:
         # Long timeout: rank 0 alone generates samples at the end.
         dist.init_process_group("nccl", timeout=timedelta(hours=3))
-        torch.cuda.set_device(0)
+    torch.cuda.set_device(0)
+    torch.cuda.set_per_process_memory_fraction(args.mem_fraction, 0)
 
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     fh = open(out / "train.log", "a")  # noqa: SIM115 — lives for the whole run
     log(fh, f"args {vars(args)} world_size {WORLD}")
+    total_mem = torch.cuda.get_device_properties(0).total_memory / 1e9
+    log(fh, f"device memory {total_mem:.1f} GB; allocator capped at "
+        f"{args.mem_fraction:.0%} = {total_mem * args.mem_fraction:.1f} GB; "
+        f"PYTORCH_CUDA_ALLOC_CONF={os.environ.get('PYTORCH_CUDA_ALLOC_CONF')}")
     random.seed(args.seed)
     torch.manual_seed(args.seed)
 
@@ -187,12 +212,29 @@ def main() -> None:
     ))
     trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
     log(fh, f"trainable params {trainable / 1e6:.1f}M")
+    if args.resume_from:
+        state = load_file(str(Path(args.resume_from) / "adapter_model.safetensors"))
+        result = set_peft_model_state_dict(model, state)
+        missing = [k for k in getattr(result, "missing_keys", []) if "lora_" in k]
+        unexpected = list(getattr(result, "unexpected_keys", []))
+        log(fh, f"resumed LoRA weights from {args.resume_from} (step {args.resume_step}): "
+            f"{len(state)} tensors, {len(missing)} missing lora keys, "
+            f"{len(unexpected)} unexpected")
+        if missing or unexpected:
+            raise SystemExit("resume checkpoint does not match the model; refusing to continue")
     core = model  # unwrapped PeftModel: save / generate / eval go through this
     if DISTRIBUTED:
         model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[0])
 
     params = [p for p in model.parameters() if p.requires_grad]
     opt = torch.optim.AdamW(params, lr=args.lr, weight_decay=0.0, betas=(0.9, 0.99))
+    if args.resume_from and (Path(args.resume_from) / "optimizer.pt").exists():
+        opt.load_state_dict(torch.load(Path(args.resume_from) / "optimizer.pt",
+                                       map_location="cuda", weights_only=True))
+        log(fh, "resumed optimizer state")
+    elif args.resume_from:
+        log(fh, "no optimizer state in checkpoint: AdamW moments restart from zero "
+            "(the LR schedule continues where it was)")
     # --grad-accum is per rank: the effective batch is grad_accum * WORLD.
     steps_per_epoch = math.ceil(len(train) / (args.grad_accum * WORLD))
     total_steps = math.ceil(steps_per_epoch * args.epochs)
@@ -206,11 +248,27 @@ def main() -> None:
         prog = (step - warmup) / max(1, total_steps - warmup)
         return args.lr * 0.5 * (1 + math.cos(math.pi * prog))
 
-    base, n = eval_loss(core, evald)
-    log(fh, f"eval loss BEFORE training: {base:.4f} over {n} tokens")
+    if args.base_eval_loss is not None:
+        base = args.base_eval_loss
+        log(fh, f"eval loss BEFORE training: {base:.4f} (given, not recomputed)")
+    else:
+        base, n = eval_loss(core, evald, fh)
+        log(fh, f"eval loss BEFORE training: {base:.4f} over {n} tokens")
 
     step, micro, t_step, tok_step, accum_loss = 0, 0, time.time(), 0, 0.0
     order: list[int] = []
+    if args.resume_step:
+        # Replay the exact data order up to the checkpoint: the shuffle is the only
+        # consumer of `random`, so popping the same number of examples per rank
+        # lands every rank where it was when the checkpoint was written.
+        for _ in range(args.resume_step * args.grad_accum):
+            if not order:
+                order = list(range(len(train)))
+                random.shuffle(order)
+                order = order[RANK::WORLD]
+            order.pop()
+        step, micro = args.resume_step, args.resume_step * args.grad_accum
+        log(fh, f"fast-forwarded data order to step {step}")
     model.train()
     while step < total_steps:
         if not order:
@@ -235,6 +293,7 @@ def main() -> None:
         gn = torch.nn.utils.clip_grad_norm_(params, 1.0)
         opt.step()
         opt.zero_grad(set_to_none=True)
+        torch.cuda.empty_cache()  # hand fragmented cached blocks back (unified memory)
         step += 1
         dt = time.time() - t_step
         eta = dt * (total_steps - step) / 3600
@@ -245,9 +304,10 @@ def main() -> None:
         t_step, tok_step, accum_loss = time.time(), 0, 0.0
         if args.save_every and step % args.save_every == 0 and RANK == 0:
             core.save_pretrained(out / "adapter-latest")
+            torch.save(opt.state_dict(), out / "adapter-latest" / "optimizer.pt")
             log(fh, f"checkpoint at step {step} -> {out / 'adapter-latest'}")
         if step % steps_per_epoch == 0 or step == total_steps:
-            ev, _ = eval_loss(core, evald)
+            ev, _ = eval_loss(core, evald, fh)
             log(fh, f"eval loss at step {step}: {ev:.4f} (before: {base:.4f})")
             if RANK == 0:
                 core.save_pretrained(out / f"adapter-step{step}")

@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Scan the commit message itself. The pre-push scan checks file contents, but a
+# message is public history too, and one once named a private host.
+root=$(git rev-parse --show-toplevel)
+if ! "$root/scripts/secret-scan.sh" "$1" >&2; then
+  echo "commit-msg: REFUSED — the message contains a secret or internal detail." >&2
+  exit 1
+fi
