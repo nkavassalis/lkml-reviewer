@@ -109,17 +109,15 @@ class ReviewPair:
         Input order is subject, thread, patch: the trainer truncates over-long
         inputs from the tail, so a long patch loses its end, never the thread.
         """
+        from .template import build_input  # noqa: PLC0415  (one source of truth)
+
         context = self.resolved_context or self.context
-        parts = [f"Subject: {self.subject}"]
-        if self.thread_context:
-            parts.append(f"--- Earlier in this thread (most recent last) ---\n{self.thread_context}")
-            parts.append("--- The patch ---")
-        parts.append(context)
+        user = build_input(self.subject, context, self.thread_context)
         review = strip_attributions(strip_list_footers(self.review))
         if not keep_signoff:
             review = strip_signoff(review)
         return {
-            "input": scrub_mangled(strip_list_footers("\n\n".join(parts))),
+            "input": scrub_mangled(strip_list_footers(user)),
             "output": scrub_mangled(review),
         }
 

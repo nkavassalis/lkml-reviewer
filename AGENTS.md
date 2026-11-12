@@ -46,6 +46,11 @@ train/          fine-tune + evaluation; runs in a container on the GPU node, not
                 score.py (proxy metrics, stdlib), judge.py + judge_check.py (blind
                 pairwise judge and its planted-wrong validation, stdlib),
                 run-chain.sh (stop serving -> train -> compare -> restore)
+reviewer/       review a GitHub PR / local diff with the LoRA: gh.py (stdlib, every
+                gh failure mapped to a remedy), prompt.py (PR -> training format),
+                backends.py (cuda now; mlx planned), __main__.py (CLI). See its README
+linuspr/template.py  the prompt format, shared by export and reviewer; a test fails
+                if train/sft_lora.py's copy drifts
 docs/           REPORT.md (results + learnings), PLAN-v3.md (next iteration)
 HANDOFF.md      where the last session actually stopped — read it alongside this file
 ```
@@ -93,7 +98,7 @@ cheap. `--delay 0.2` is the floor of politeness on that volunteer mirror.
 ## How to test
 
 ```bash
-.venv/bin/python -m pytest        # 126 hermetic tests, no network, no sleeping
+.venv/bin/python -m pytest        # 170 hermetic tests, no network, no sleeping
 .venv/bin/python -m ruff check .
 scripts/gate.sh                   # pytest + lint + compileall + secret scan
 ```

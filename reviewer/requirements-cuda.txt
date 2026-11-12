@@ -1,0 +1,8 @@
+# Inference on an NVIDIA GPU. Pinned to the versions the adapter was trained and
+# evaluated with; the stdlib parts of reviewer/ need none of this.
+torch>=2.13
+transformers==5.19.0
+peft==0.21.2
+accelerate==1.15.0
+flash-linear-attention==0.6.0   # Gated DeltaNet kernels; without it, a slow fallback
+# bitsandbytes                  # only for --load-in-4bit
