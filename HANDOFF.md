@@ -123,6 +123,39 @@ a session cron job). The run-3 freeze is written up there.
    with or endorsed by Linus Torvalds", and links this repo and the template.
    Show Nick the final card first.
 
+## 4d. RUNNING UNATTENDED from 2026-11-13 (Nick away a couple of days)
+
+**On the master node** (`~/linuspr-train`): a loop runs `night-run.sh` with
+`night-plan-v4.sh` for up to three nights (stops early once
+`RESULTS-v4.md` exists). Each night: smoke test of the whole v4 chain (once;
+failure stops the night), v4 training (`--resume-auto`, both nodes), v4
+evaluation on the same 100 held-out patches, then the blind judge (v4 vs v3,
+v4 vs base) and `RESULTS-v4.md` via `make_results_v4.py`, all inside
+20:00–08:00 ET. Hard stop 07:40 ET; vLLM restored by the chains, double-checked
+by the launcher. The plan and results script are cluster-local copies of
+`data/cluster/night-plan-v4.sh` and `data/cluster/make_results_v4.py` (they hold
+cluster addresses, so they're not in git).
+
+- Logs: `~/linuspr-train/night-YYYY-MM-DD.log` (`latest-run.log` points at the
+  current one), `chain-<run>.log`, `run-4/train.log`, `run-4/judges.log`.
+- Stop it safely: `pkill -f "for n in 1 2 3; do \[ -f RESULTS-v4.md \]"` and
+  `pkill -f night-run.sh` *outside* the window. Inside the window, stop the
+  chain instead (`pkill -TERM -f run-chain-2node.sh`): its trap restores vLLM.
+
+**On this box:** `scripts/night-reporter.sh` (supervised loop; pid in
+`data/reporter/reporter.pid`; `scripts/night-reporter.sh status|stop`) emails
+the owner via the monitoring box's Gmail sender (configured in the gitignored `.status.env`):
+PROBLEM at once, a Report after each night, FINISHED with `RESULTS-v4.md`;
+then it stops itself. A test email was sent and confirmed in the Sent folder.
+
+**Also pending:** the Mac input-order probe (v3 with patch-first inputs, same
+100 patches): `~/lkml-mac/compare-v3-patchfirst.jsonl` on the Mac. Compare with
+`data/train/run-3b/compare-v3-mlx.jsonl` using `slice.py` (template) to see how
+much of the layout effect needs no retraining.
+
+v4 data: `data/v4/sft*.jsonl` (patch-first layout, `export --layout
+patch-first`). v3's as-trained data: `data/train/run-3b/`.
+
 ## 5. Next actions
 
 Follow `docs/PLAN-v3.md`: Phase 0 (data), then a 2-node data-parallel smoke test,
