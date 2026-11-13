@@ -41,6 +41,29 @@ v3's 8-bit Mac build matched CUDA on every proxy except identifier-naming
 
 Both are one sample per patch on a crude proxy: suggestive, not proven.
 
+## Update 2026-11-13: the probe, and what v4 is for now
+
+**Inference-only probe** (v3 8-bit on the Mac, same patches, the *patch-first*
+layout it was never trained on, 89 of 100 done): with thread context (76
+patches), v3 named something from the patch **33%** of the time, against
+**20%** with its own thread-first layout (Linus: 29%). Replies got shorter
+(348 → 284 chars). Much of what v4 targets is available without retraining,
+by reordering the input at inference.
+
+**And the measurement is too noisy for small effects.** On the 13 patches
+without a thread, the input is byte-identical in both runs, yet the two
+samples scored 46% vs 23%: one sample per patch on ~100 patches can't
+separate a real 10-point change from luck. The 8%-vs-31% split reported above
+(CUDA, one sample) and this 20% (Mac, another sample) on the same slice point
+the same way, but their size is uncertain.
+
+**Decision (with Nick):** run v4 anyway. The window is otherwise idle, and
+any accuracy training (v5, DPO) starts from a supervised model in the final
+input layout, which is v4. Meanwhile: build a stronger evaluation (several
+samples per patch, a larger subset) and plan v5 (`docs/PLAN-v5.md`). Judge v4
+with the stronger evaluation once it exists, not only the night plan's
+single-sample run.
+
 ## v4 criteria (set before training, like v3's)
 
 **Gates, no regression allowed:** 0% sign-offs and email addresses;
