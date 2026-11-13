@@ -43,12 +43,16 @@ Both are one sample per patch on a crude proxy: suggestive, not proven.
 
 ## Update 2026-11-13: the probe, and what v4 is for now
 
-**Inference-only probe** (v3 8-bit on the Mac, same patches, the *patch-first*
-layout it was never trained on, 89 of 100 done): with thread context (76
-patches), v3 named something from the patch **33%** of the time, against
-**20%** with its own thread-first layout (Linus: 29%). Replies got shorter
-(348 → 284 chars). Much of what v4 targets is available without retraining,
-by reordering the input at inference.
+**Inference-only probe** (v3 8-bit on the Mac, same 100 patches, the
+*patch-first* layout it was never trained on; final, 100/100): with thread
+context (87 patches), v3 named something from the patch **43%** of the time
+against **21%** with its own thread-first layout. Compare each with Linus' rate
+on the same input: the layouts truncate the patch differently, so his rate is
+36% for patch-first and 26% for thread-first. Thread-first v3 grounds at
+~0.8× his rate; patch-first v3 at ~1.2×. Replies got shorter (349 → 287
+chars, against his 980). Much of what v4 targets is available without
+retraining, by reordering the input at inference. (`slice.py` from the
+template; data in `data/train/run-3b/compare-v3-{mlx,patchfirst}.jsonl`.)
 
 **And the measurement is too noisy for small effects.** On the 13 patches
 without a thread, the input is byte-identical in both runs, yet the two
