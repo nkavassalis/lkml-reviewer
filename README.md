@@ -10,7 +10,8 @@ This repo has the whole method: a polite crawler and data pipeline that mines
 worked, what didn't, and the bugs that nearly poisoned the data.
 
 - **Results and learnings:** [`docs/REPORT.md`](docs/REPORT.md)
-- **Next iteration:** [`docs/PLAN-v3.md`](docs/PLAN-v3.md)
+- **Next iteration:** [`docs/PLAN-v5.md`](docs/PLAN-v5.md)
+- **The model (v3):** [nkavassalis/lkml-reviewer-lora](https://huggingface.co/nkavassalis/lkml-reviewer-lora) on Hugging Face
 - **Design decisions, invariants, measured numbers:** [`AGENTS.md`](AGENTS.md)
 - **Where the work stopped:** [`HANDOFF.md`](HANDOFF.md)
 - **Reusable version for other datasets:** [finetune-27b-template](https://github.com/nkavassalis/finetune-27b-template),
@@ -19,13 +20,21 @@ worked, what didn't, and the bugs that nearly poisoned the data.
 Not included: the corpus, the training data, or the model weights. They're
 other people's words and a derived model, and everything here rebuilds them.
 
-## Where it stands
+## The journey so far
 
-v2, the current model, learned the *style* from 1,175 examples in one epoch:
-plain-text, terse reviews, with abusive language below Linus' own rate. It did
-not learn the *substance*: its reviews are shorter and less specific than his,
-and sometimes confidently wrong. v3 attacks that with 4.6× more data and thread
-context. Details and numbers are in the report.
+Every version so far learned how Linus *sounds*; v5 is the first aimed at
+being *right*.
+
+| version | what changed | what we learned |
+| --- | --- | --- |
+| **v1** | First LoRA on ~1,200 review pairs, 2 epochs, one GPU. | Opened 94% of reviews with an invented "On <date>, <name> wrote:": the training targets still carried quote headers. The model learns your data bugs; read its output. |
+| **v2** | Headers stripped, 1 epoch. | Learned the style (terse, plain text, less abusive than Linus) and beat the base model 44–16 in a blind judge, mostly by saying less rather than saying wrong things. Signed every review "Linus"; greedy decoding looped 44% of the time. |
+| **v3** | 4.4× the data (5,110 pairs), earlier thread messages in the input, sign-offs stripped, 2 nodes. | Never signs as Linus and has the best held-out loss; beats the base 51–24 but ties v2, because the thread context pulled it off the patch. [Published](https://huggingface.co/nkavassalis/lkml-reviewer-lora), with an MLX 8-bit build for a 64 GB Mac that loses nothing measurable. |
+| **v4** | Same data, patch first and thread after. | Before training, a probe showed much of the gain comes free by reordering v3's input, and that one sample per patch can't see a 10-point effect, so we built multi-sample evaluation with noise floors. Trains in the overnight window; results pending. |
+| **v5** | Queued: preference training (DPO). v4 writes 4 reviews per patch, a judge ranks them against Linus' real reply, and training pushes toward the better one. | Not yet run. The aim: the first version with a signal for "this review is wrong", not just "this doesn't sound like him". |
+
+Numbers and details: [`docs/REPORT.md`](docs/REPORT.md),
+[`docs/PLAN-v4.md`](docs/PLAN-v4.md), [`docs/PLAN-v5.md`](docs/PLAN-v5.md).
 
 **This is an unofficial style imitation, not affiliated with or endorsed by
 Linus Torvalds.** Don't post its output to a mailing list or attribute it to him.

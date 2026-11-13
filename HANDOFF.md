@@ -199,6 +199,8 @@ patch-first`). v3's as-trained data: `data/train/run-3b/`.
    greedy vs base 0%; DPO with looping candidates as "rejected" may reduce it.
    Waits for `~/lkml-mac/v5/mlx-8bit`: **the v5 convert item must build there.**
 
+When v4's and v5's results land, update their rows in README's "The journey so far" table (Nick wants the learning documented front and centre).
+
 A failed item halts the queue (`workqueue.py reset ID` to retry, `skip ID`).
 Tested: the v5 data path end to end against a fake judge (chunking, merge,
 scoring, pairs, check pack); the runner's email sequence (tests/test_workqueue.py).
