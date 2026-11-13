@@ -24,11 +24,12 @@ def main() -> None:
     ap.add_argument("--adapter", default=None)
     ap.add_argument("--max-len", type=int, default=4096)
     ap.add_argument("--out", required=True)
+    ap.add_argument("--limit", type=int, default=None, help="smoke test: first N rows")
     args = ap.parse_args()
 
     torch.cuda.set_per_process_memory_fraction(0.75, 0)
     tok = AutoTokenizer.from_pretrained(args.model)
-    data, skipped, truncated = load(args.eval, tok, args.max_len, None)
+    data, skipped, truncated = load(args.eval, tok, args.max_len, args.limit)
     model = AutoModelForImageTextToText.from_pretrained(args.model, dtype=torch.bfloat16,
                                                         device_map={"": 0})
     if args.adapter:

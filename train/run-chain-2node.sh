@@ -108,7 +108,7 @@ if [ -n "$EVAL_ARMS_MASTER" ]; then
     peer_job="$(cmp_cmd "$EVAL_ARMS_PEER" "$EVAL_ADAPTERS_PEER" "$RUN-compare-peer.jsonl")"
     for pair in ${PEER_EVAL_LOSS:-}; do  # name=adapter-path ("base=" for none)
       name=${pair%%=*}; path=${pair#*=}
-      peer_job="$peer_job && docker exec -w /work $TRAIN_CTR python3 eval_loss.py --eval sft_eval.jsonl ${path:+--adapter $path} --out $RUN-loss-$name.json"
+      peer_job="$peer_job && docker exec -w /work $TRAIN_CTR python3 eval_loss.py --eval sft_eval.jsonl ${path:+--adapter $path} ${EVAL_LOSS_LIMIT:+--limit $EVAL_LOSS_LIMIT} --out $RUN-loss-$name.json"
     done
     peer "$peer_job" > "$WORK/$RUN.compare-peer.out" 2>&1 &
     cpeer=$!
