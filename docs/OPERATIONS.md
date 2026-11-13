@@ -65,7 +65,10 @@ survive the session, add a system cron entry on the monitoring box, e.g.
 
 ## Launch checklist for a long run
 
-- [ ] Smoke test the exact command (a few steps) and read its sample output.
+- [ ] Smoke test the **whole chain**, evaluation and file copies included, at
+      tiny sizes (a few steps, a few eval rows), and read its sample output.
+      lkml-reviewer's run-3b trained for 10 h, then stopped at a copy step the
+      smoke test had skipped (the container wrote the adapter as root, mode 600).
 - [ ] Memory cap set; peak memory from the smoke test well under it.
 - [ ] Checkpoints every ≤ 1 h of work, with optimizer state.
 - [ ] Serving stack stopped *by the chain script*, restored by its trap.

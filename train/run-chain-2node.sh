@@ -19,6 +19,9 @@
 #                empty EVAL_ARMS_MASTER skips evaluation
 #   EVAL_ADAPTERS_MASTER / EVAL_ADAPTERS_PEER   name=path lists for compare.py
 #   EVAL_SUBSET  held-out rows to generate for (default 100)
+#   EVAL_ONLY    1 = skip training and evaluate an existing $RUN/adapter-final
+#   PEER_EVAL_LOSS   after its arms, the peer scores these adapters' held-out loss,
+#                e.g. "v2=run-2-adapter base=" (empty path = the bare base)
 #   WORK, TRAIN_CTR, SERVE_CTR   as in run-chain.sh
 set -u
 : "${RUN:?}" "${PEER:?}" "${MASTER_ADDR:?}" "${IFACE:?}"
@@ -69,6 +72,9 @@ say "stopping $SERVE_CTR on both nodes"
 docker stop -t 60 "$SERVE_CTR" >> "$LOG" 2>&1
 peer docker stop -t 60 "$SERVE_CTR" >> "$LOG" 2>&1
 
+if [ "${EVAL_ONLY:-0}" = 1 ]; then
+  say "EVAL_ONLY: skipping training, evaluating existing $RUN/adapter-final"
+else
 say "training $RUN on 2 nodes"
 peer "$(torchrun_cmd 1)" > "$WORK/$RUN.rank1.out" 2>&1 &
 rank1=$!
@@ -84,6 +90,7 @@ if ! wait $rank1; then
   fi
 fi
 say "training done"
+fi
 
 if [ -n "$EVAL_ARMS_MASTER" ]; then
   # The peer needs the new adapter for its arms. The container writes as root
@@ -98,8 +105,12 @@ if [ -n "$EVAL_ARMS_MASTER" ]; then
       --subset "$EVAL_SUBSET" --modes sampled --arms "$1" --adapters $2 --out "$3"
   }
   if [ -n "$EVAL_ARMS_PEER" ]; then
-    peer "$(cmp_cmd "$EVAL_ARMS_PEER" "$EVAL_ADAPTERS_PEER" "$RUN-compare-peer.jsonl")" \
-      > "$WORK/$RUN.compare-peer.out" 2>&1 &
+    peer_job="$(cmp_cmd "$EVAL_ARMS_PEER" "$EVAL_ADAPTERS_PEER" "$RUN-compare-peer.jsonl")"
+    for pair in ${PEER_EVAL_LOSS:-}; do  # name=adapter-path ("base=" for none)
+      name=${pair%%=*}; path=${pair#*=}
+      peer_job="$peer_job && docker exec -w /work $TRAIN_CTR python3 eval_loss.py --eval sft_eval.jsonl ${path:+--adapter $path} --out $RUN-loss-$name.json"
+    done
+    peer "$peer_job" > "$WORK/$RUN.compare-peer.out" 2>&1 &
     cpeer=$!
   fi
   $(cmp_cmd "$EVAL_ARMS_MASTER" "$EVAL_ADAPTERS_MASTER" "$RUN/compare-master.jsonl") \
@@ -107,6 +118,9 @@ if [ -n "$EVAL_ARMS_MASTER" ]; then
   [ -n "$EVAL_ARMS_PEER" ] && wait $cpeer
   [ -n "$EVAL_ARMS_PEER" ] && scp -q "$PEER:$(basename "$WORK")/$RUN-compare-peer.jsonl" \
     "$WORK/$RUN/compare-peer.jsonl"
+  for pair in ${PEER_EVAL_LOSS:-}; do
+    scp -q "$PEER:$(basename "$WORK")/$RUN-loss-${pair%%=*}.json" "$WORK/$RUN/" || true
+  done
   say "evaluation done"
 fi
 say "CHAIN DONE"
