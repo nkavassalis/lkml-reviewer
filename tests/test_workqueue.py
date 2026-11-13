@@ -108,6 +108,7 @@ gate = "human"
     fake.write_text(f'#!/bin/bash\necho "${{@: -1}}" >> {sent}\ncat > /dev/null\n')
     fake.chmod(0o755)
     env |= {"NOTIFY_CMD": str(fake), "QUEUE_RUNNER_STATE": str(tmp_path / "runner"),
+            "NOTIFY_LOG_DIR": str(tmp_path),
             "WINDOW_START": "00:00", "WINDOW_END": "23:59", "STOP_MARGIN_MIN": "0"}
     runner = ROOT / "scripts" / "queue-runner.sh"
     for _ in range(4):

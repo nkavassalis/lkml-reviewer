@@ -7,7 +7,7 @@
 # last argument and reads the body on stdin, e.g. a Gmail sender:
 #   NOTIFY_CMD='python3 /path/to/send_mail.py --to someone@example.com --subject'
 # or ntfy, Slack, sendmail... Every notification is also appended to
-# runs/notifications.log (or ./notifications.log), so nothing is lost when
+# runs/notifications.log (or data/, or ./; NOTIFY_LOG_DIR overrides), so nothing is lost when
 # NOTIFY_CMD is unset or fails. Credentials never pass through this script.
 set -u
 root="$(cd "$(dirname "$0")/.." && pwd)"
@@ -25,7 +25,7 @@ load_env() {
 [ -f "$root/.status.env" ] && load_env "$root/.status.env"
 subject="${1:?usage: notify.sh SUBJECT < body}"
 body=$(cat)
-logdir="$root/runs"; [ -d "$logdir" ] || logdir="$root/data"; [ -d "$logdir" ] || logdir="$root"
+logdir="${NOTIFY_LOG_DIR:-$root/runs}"; [ -d "$logdir" ] || logdir="$root/data"; [ -d "$logdir" ] || logdir="$root"
 { echo "=== $(date '+%F %T %Z') | $subject"; echo "$body"; echo; } >> "$logdir/notifications.log"
 if [ -n "${NOTIFY_CMD:-}" ]; then
   # shellcheck disable=SC2086  (NOTIFY_CMD is a command line by design)

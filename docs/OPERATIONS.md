@@ -112,6 +112,9 @@ hosts from `.status.env`. Rules learned building it:
   `python3 train/workqueue.py approve ID`.
 - `pgrep -f` over ssh matches the remote shell running it: bracket a letter
   (`'[c]ompare.py'`).
+- **Never overwrite a script bash is running** (the v4 loop's `night-run.sh`
+  waits for hours): bash reads it as it goes. Copy to a temporary name and `mv`
+  over it.
 
 ## Monitoring: two layers, different jobs
 
