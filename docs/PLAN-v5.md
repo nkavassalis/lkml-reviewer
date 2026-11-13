@@ -22,9 +22,12 @@ patch, one judged closer to the truth, and push it toward that one.
    substantive points, then specificity. Keep a pair (best, worst) only when the
    judge separates them clearly; ties and judge failures are dropped, never
    guessed.
-3. **Train.** DPO with β ≈ 0.1: a new LoRA on top of v4, with v4 itself
-   (frozen) as the reference model. Both are the same base weights with
-   different adapters, so memory stays at one 27B copy.
+3. **Train.** DPO with β ≈ 0.1, continuing from v4: the trainable "policy"
+   adapter starts as a copy of v4's adapter, and a frozen copy of v4 is the
+   reference model. Both are the same base weights with different adapters, so
+   memory stays at one 27B copy. v5 ships as one adapter (v4's, moved by DPO),
+   not a second adapter stacked on v4. This is the first version that starts
+   from an earlier one: v1–v4 were each a fresh LoRA on the base model.
 4. **Evaluate** with the stronger evaluation (several samples per patch,
    paired CIs, noise floor, `train/paired_stats.py`), against v4 and v3.
 
