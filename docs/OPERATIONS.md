@@ -49,6 +49,48 @@ Eastern, cluster time.
   test clock (`WINDOW_NOW`), and the launcher's hard stop, trap and safety net
   were exercised end to end against a fake `docker`.
 
+### "Go for it": running now instead
+
+`GO_NOW=1 train/night-run.sh` starts immediately, inside the window or not,
+with an optional hard stop after `MAX_HOURS`. Everything else is the same:
+the plan, the stop handling, the safety net and the reporting. Running
+outside the agreed window needs the owner's explicit OK; the log records
+that the run was started by request, and the reporter emails a "Started"
+notice for it.
+
+### Unattended runs: reports by email (optional)
+
+When nobody is watching, `scripts/night-reporter.sh start` runs a supervised
+loop on the **monitoring box** (not the cluster, so a frozen node can't take
+it down). Every 5 minutes it checks, and it sends:
+
+| message | when |
+| --- | --- |
+| **PROBLEM** | `status.sh` raises an alarm, or the run's log shows a failure (`FAILED`, `HARD STOP reached`, a traceback, a non-zero exit). One email per distinct failure, not one per check. |
+| **Started** | a run began outside the window (`GO_NOW`) |
+| **Report** | the run ended (the launcher logged `night done`): plan log, training progress, status |
+| **FINISHED** | the plan wrote its results file (`RESULTS_FILE`); the email carries it, then the reporter stops |
+
+It follows the launcher's `latest-run.log` link, so windowed nights and go-now
+runs report identically. Sending is pluggable: `NOTIFY_CMD` is any command
+that takes the subject as its last argument and the body on stdin
+(e.g. a Gmail sender script that reads its own credentials, ntfy, Slack, sendmail). Without one, messages go to
+`notifications.log` only. Credentials never pass through these scripts.
+
+**Settings in `.status.env` are defaults only.** Anything set in the
+environment wins, so a test (`NOTIFY_CMD=… REPORTER_STATE=/tmp/x
+night-reporter.sh once`) can never reach the real sender or mark real
+messages as sent. On lkml-reviewer, the first version re-read `.status.env`
+after the test's settings and quietly pointed at the real work directory.
+
+**Test the whole sequence before leaving it alone.** Stage a scratch run
+directory with log lines for each event (start, a failure, the end, a results
+file), run `once` after each step with a fake sender, and check you get
+exactly one message per event. That test found two reporter bugs: "hard stop
+at 14:00" in a healthy log line matched as a failure, and one failure produced
+several emails as the log grew. Then send one real message and check it
+arrived.
+
 ## Monitoring: two layers, different jobs
 
 | layer | what | cadence | purpose |
