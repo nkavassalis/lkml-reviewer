@@ -142,6 +142,57 @@ not being wrong, not evidence that v2 has more substance than the base. Where
 the base wins, it's usually because v2 gave a bare ack where the patch needed
 a review.
 
+## 5b. v3 (2026-11-13)
+
+**What changed from v2:** 4.4× the data (5,110 trained pairs; the gate now
+accepts any reply whose real patch was recovered), the earlier thread messages
+in the input (78–85% of rows), bookkeeping replies dropped, "Linus" sign-offs
+stripped, 2023–2024 held out (766 pairs, 10× v2's), 2 nodes, 1 epoch.
+
+**Evaluation:** 100 fixed held-out patches, sampled (T 0.7, top-p 0.95,
+repetition penalty 1.1), base / v2 / v3 from BF16 on CUDA, v3 also as the MLX
+8-bit Mac build. Blind pairwise judge (both orders); it passed the
+planted-wrong check 20/20.
+
+| | Linus | base | v2 | v3 |
+|---|---|---|---|---|
+| median length (chars) | 924 | 2,064 | 437 | 362 |
+| names an identifier from the input | 39% | 90% | 33% | 22% |
+| chatbot-style phrasing | 20% | 49% | 6% | 3% |
+| abuse-filter flags | 0% | 51% | 8% | 2% |
+| signs "Linus" (anywhere) | 7% | 6% | 100% | **0%** |
+| email addresses | 0% | 2% | 0% | 0% |
+| loops | 0% | 1% | 0% | 0% |
+
+| blind judge | result | reading |
+|---|---|---|
+| v3 vs base | **51 – 24** (15 tie, 10 invalid) | v3 better (sign test p ≈ 0.002) |
+| v3 vs v2 | 33 – 38 (17 tie, 12 invalid) | a tie (p ≈ 0.6) |
+| Mac 8-bit vs CUDA v3 | 38 – 34 (21 tie, 7 invalid) | a tie (p = 0.72): the conversion loses nothing measurable |
+
+**Held-out loss, like for like** (same 147 rows of v3's eval set, both 8-bit
+on the Mac): v2 1.983 (perplexity 7.27), **v3 1.905** (6.72). On CUDA BF16,
+v3 went 2.109 → 1.872 on the full 766-row set.
+
+**Reading:** v3 is a real improvement in hygiene (it never signs as Linus,
+and is the least abusive and least chatbot-like of the three) and in how well
+it predicts his replies. It is **not** a better reviewer than v2. The
+judge's reasons say why: v2 wins when it "directly addresses the patch's…"
+change, v3 loses when it makes a false claim about the code. Two diagnostics
+point at the cause:
+
+1. v3's training targets have a median of 620 chars against 906 held out
+   (his length is stable across eras), so the selection skewed short.
+2. Thread context pulled it off the patch: on inputs with context, v3 names
+   something from the *patch* 8% of the time (v2 24%, Linus 26%); without,
+   31%.
+
+Both are the v4 levers (`docs/PLAN-v4.md`).
+
+**Release checks** (100 sampled replies, CUDA and Mac alike): 0 "Linus"
+signatures, 0 email addresses. It does open by addressing a real developer by
+first name in 37% of replies (Linus: 27%).
+
 ## 6. What we learned
 
 - **The style transferred, from 1,175 examples and one epoch.** The fine-tune
