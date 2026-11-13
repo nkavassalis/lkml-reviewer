@@ -95,6 +95,8 @@ def main() -> None:
     # 400 cut off 50/78 base reviews mid-sentence in run-1 and biased the judge.
     ap.add_argument("--max-new", type=int, default=1024)
     ap.add_argument("--no-sample", action="store_true", help="greedy arms only (legacy)")
+    ap.add_argument("--samples", type=int, default=1,
+                    help="seeded samples per input for sampled arms (paired_stats.py, make_preferences.py)")
     ap.add_argument("--max-prompt", type=int, default=3000)
     args = ap.parse_args()
 
@@ -123,17 +125,21 @@ def main() -> None:
     out = [{"input": r["input"], "reference": r["output"],
             **({"eval_index": r["eval_index"]} if "eval_index" in r else {})} for r in rows]
 
-    def run(arm: str, mode: str) -> None:
+    def run(arm: str, mode: str, k: int = 0) -> None:
         sample = mode == "sampled"
+        seed = 7 + 1000 * k  # a different, reproducible seed per sample
         if arm == "base":
             ctx = model.disable_adapter() if named else contextlib.nullcontext()
             with ctx:
-                texts = generate(model, tok, prompts, args.batch, args.max_new, sample=sample)
+                texts = generate(model, tok, prompts, args.batch, args.max_new, sample=sample, seed=seed)
         else:
             model.set_adapter(arm)
-            texts = generate(model, tok, prompts, args.batch, args.max_new, sample=sample)
-        # legacy key names: tuned / base / tuned_sampled / base_sampled
+            texts = generate(model, tok, prompts, args.batch, args.max_new, sample=sample, seed=seed)
+        # legacy key names: tuned / base / tuned_sampled / base_sampled; with
+        # --samples K > 1, sampled arms are KEY_s0..KEY_s{K-1} (paired_stats.py)
         key = arm if mode == "greedy" else f"{arm}_sampled"
+        if sample and args.samples > 1:
+            key = f"{key}_s{k}"
         for row, text in zip(out, texts, strict=True):
             row[key] = text
         with open(args.out, "w") as f:  # rewritten after every arm: a crash keeps the rest
@@ -147,7 +153,8 @@ def main() -> None:
         modes = ["greedy"]
     for mode in modes:
         for arm in arms:
-            run(arm, mode)
+            for k in range(args.samples if mode == "sampled" else 1):
+                run(arm, mode, k)
 
 
 if __name__ == "__main__":
