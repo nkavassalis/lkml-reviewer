@@ -66,3 +66,22 @@ run = "true"
 after = ["v5-check-pack"]
 gate = "human"
 # After approval: add v5-dpo-smoke, v5-dpo-train, v5-eval here (docs/PLAN-v5.md).
+
+# Asked by Nick 2026-11-13: does v5 (DPO) loop less under greedy decoding?
+# Waits for a v5 MLX build at ~/lkml-mac/v5/mlx-8bit (the v5 convert item, to be
+# added after the human check, must build it there).
+[[item]]
+id = "greedy-loops"
+title = "Start greedy-decoding loop check on the Mac: v3, v4, v5"
+run = "scripts/q/greedy-loops.sh"
+est_min = 3
+after = ["v5-human-check"]
+when = "scripts/q/ready.sh v5mac"
+
+[[item]]
+id = "greedy-loops-report"
+title = "Greedy-decoding loop rate: v3 / v4 / v5"
+run = "scripts/q/greedy-loops-report.sh"
+est_min = 2
+after = ["greedy-loops"]
+when = "scripts/q/ready.sh mac"

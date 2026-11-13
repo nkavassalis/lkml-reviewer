@@ -43,6 +43,9 @@ def main() -> None:
                     help="seeded samples per patch, stored as KEY_s0..KEY_s{N-1}: one sample "
                          "per patch can't separate a 10-point effect from luck")
     ap.add_argument("--seed", type=int, default=1234)
+    ap.add_argument("--greedy", action="store_true",
+                    help="argmax, no repetition penalty (as compare.py's greedy mode): "
+                         "measures looping, which sampling hides")
     args = ap.parse_args()
 
     with open(args.eval) as f:
@@ -50,8 +53,11 @@ def main() -> None:
     idx = sorted(random.Random(args.subset_seed).sample(range(len(rows)), args.subset))
     model, tok = load(args.model)
     hf = getattr(tok, "_tokenizer", tok)  # mlx-lm wraps the HF tokenizer
-    sampler = make_sampler(temp=SAMPLING["temperature"], top_p=SAMPLING["top_p"])
-    procs = make_logits_processors(repetition_penalty=SAMPLING["repetition_penalty"])
+    if args.greedy:
+        sampler, procs = make_sampler(temp=0.0), []
+    else:
+        sampler = make_sampler(temp=SAMPLING["temperature"], top_p=SAMPLING["top_p"])
+        procs = make_logits_processors(repetition_penalty=SAMPLING["repetition_penalty"])
 
     done = {}
     if Path(args.out).exists():  # resumable: keep rows already generated

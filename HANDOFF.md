@@ -193,6 +193,12 @@ patch-first`). v3's as-trained data: `data/train/run-3b/`.
    smoke, DPO training and v5 eval items (they need chain support for
    `dpo_lora.py`, not written yet).
 
+9. `greedy-loops` + `greedy-loops-report` (Nick, 2026-11-13: "measure after
+   v5"): greedy decoding (`compare_mlx.py --greedy`, no repetition penalty) for
+   v3, v4 and v5 on 100 held-out patches; loop rate emailed. v2 looped on 44%
+   greedy vs base 0%; DPO with looping candidates as "rejected" may reduce it.
+   Waits for `~/lkml-mac/v5/mlx-8bit`: **the v5 convert item must build there.**
+
 A failed item halts the queue (`workqueue.py reset ID` to retry, `skip ID`).
 Tested: the v5 data path end to end against a fake judge (chunking, merge,
 scoring, pairs, check pack); the runner's email sequence (tests/test_workqueue.py).
