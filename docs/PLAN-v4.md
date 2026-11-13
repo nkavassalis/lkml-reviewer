@@ -22,11 +22,18 @@ v3's 8-bit Mac build matched CUDA on every proxy except identifier-naming
 
 ## Two diagnostics that already point at levers
 
-1. **v3 was trained on shorter replies than Linus writes.** His reply length
-   is stable across eras (median 755–950 chars per 5-year band, 2005–2026),
-   but v3's training targets have a median of **620**, against **906** on the
-   held-out set. The wider v3 gate likely admitted more short discussion
-   replies. A model trained on short targets writes short replies.
+1. **v3's training replies are shorter than the held-out ones, because Linus
+   writes longer now.** Training targets: median **620** chars; held-out
+   (2023–24): **906**. *Correction (2026-11-13):* I first blamed the data
+   selection, claiming his length was "stable across eras". That came from raw
+   replies padded with footers and quote headers. Measured after cleaning, his
+   median is ~580–590 chars through 2005–2019 and **778 for 2020–2024**, and
+   within each gate the held-out years run 35–40% longer than the training
+   years (recovered-patch rows 581 → 808; quoted-code rows 737 → 958). A
+   length filter would also drop real terse reviews: in a 15-row sample about
+   half the short replies it caught were technical ("Just test bit #2…",
+   "…rather than when you're in a COW section."). So the lever is **recency
+   weighting**, not filtering.
 2. **Thread context pulls v3 off the patch.** On the 87 patches with thread
    context, v3 names something from the *patch* 8% of the time (v2 24%,
    Linus 26%). On the 13 without, 31%. v3 appears to answer the discussion and
@@ -53,7 +60,7 @@ the Mac 8-bit build ties CUDA in the blind judge.
 
 | if v3's results show… | v4 change |
 |---|---|
-| short, thin replies because the targets are (diagnostic 1) | rebalance the data: drop or down-weight short replies with no technical content until train and held-out lengths match (`ft27b shift`-style check before training) |
+| short replies because the held-out era writes longer (diagnostic 1, corrected) | **recency weighting**: up-weight recent years in training until train and held-out lengths roughly match; no length filter (it drops real terse reviews) |
 | it answers the thread, not the patch (diagnostic 2) | patch first, thread second, each with its own token budget; trim the thread, never the patch |
 | truncated inputs score worse | keep every file's hunks instead of cutting the tail, or 6k context if memory allows |
 | more false claims than v2 (judge reasons) | preference training: sample v3 several times per patch, rank against Linus' reply with the judge, DPO on chosen vs rejected |

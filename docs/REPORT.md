@@ -181,8 +181,10 @@ judge's reasons say why: v2 wins when it "directly addresses the patch's…"
 change, v3 loses when it makes a false claim about the code. Two diagnostics
 point at the cause:
 
-1. v3's training targets have a median of 620 chars against 906 held out
-   (his length is stable across eras), so the selection skewed short.
+1. v3's training targets have a median of 620 chars against 906 held out.
+   Not a selection bug, as first thought: after cleaning, Linus' replies run
+   ~580–590 chars through 2005–2019 and 778 in 2020–2024. The held-out years
+   are a wordier era; v3 learned the 25-year average.
 2. Thread context pulled it off the patch: on inputs with context, v3 names
    something from the *patch* 8% of the time (v2 24%, Linus 26%); without,
    31%.
