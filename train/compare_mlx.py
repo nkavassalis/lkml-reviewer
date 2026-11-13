@@ -39,6 +39,10 @@ def main() -> None:
     ap.add_argument("--subset-seed", type=int, default=7)
     ap.add_argument("--max-new", type=int, default=1024)
     ap.add_argument("--max-prompt", type=int, default=3000)
+    ap.add_argument("--samples", type=int, default=1,
+                    help="seeded samples per patch, stored as KEY_s0..KEY_s{N-1}: one sample "
+                         "per patch can't separate a 10-point effect from luck")
+    ap.add_argument("--seed", type=int, default=1234)
     args = ap.parse_args()
 
     with open(args.eval) as f:
@@ -65,15 +69,19 @@ def main() -> None:
             if len(ids) > args.max_prompt:  # same truncation as compare.py
                 user = hf.decode(ids[: args.max_prompt]) + TRUNC_MARK
             prompt = prompt_text(hf, user)
-            text, last = "", None
-            for last in stream_generate(model, tok, prompt, max_tokens=args.max_new,
-                                        sampler=sampler, logits_processors=procs):
-                text += last.text
-            fh.write(json.dumps({"eval_index": i, "input": rows[i]["input"],
-                                 "reference": rows[i]["output"], args.key: text.strip(),
-                                 "gen_tokens": last.generation_tokens if last else 0,
-                                 "gen_tps": round(last.generation_tps, 2) if last else 0,
-                                 "peak_gb": round(last.peak_memory, 1) if last else 0}) + "\n")
+            out = {"eval_index": i, "input": rows[i]["input"], "reference": rows[i]["output"]}
+            for k in range(args.samples):
+                import mlx.core as mx  # noqa: PLC0415
+                mx.random.seed(args.seed * 100003 + i * 101 + k)  # reproducible per patch/sample
+                text, last = "", None
+                for last in stream_generate(model, tok, prompt, max_tokens=args.max_new,
+                                            sampler=sampler, logits_processors=procs):
+                    text += last.text
+                key = args.key if args.samples == 1 else f"{args.key}_s{k}"
+                out[key] = text.strip()
+                out["gen_tps"] = round(last.generation_tps, 2) if last else 0
+                out["peak_gb"] = round(last.peak_memory, 1) if last else 0
+            fh.write(json.dumps(out) + "\n")
             fh.flush()
             print(f"[{time.strftime('%H:%M:%S')}] {n}/{len(idx)} rows, "
                   f"{(time.time() - t0) / 60:.0f} min", flush=True)
