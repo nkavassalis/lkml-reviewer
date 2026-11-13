@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# v5 step 1: 4 sampled reviews per training patch from v4, on 800 training
+# v5 step 1: 4 sampled reviews per training patch from v5's starting model
+# (data/v5/BASE, chosen by multisample-report: v4 by default), on 800 training
 # patches (8 chunks of 100), two chunks at a time (one per node). Resumable:
 # exits 75 while chunks remain, and the next window continues.
 . "$(dirname "$0")/lib.sh"
@@ -15,7 +16,10 @@ for c in range(8):
             f.write(json.dumps(json.loads(rows[i]) | {"train_index": i}) + "\n")
 PY
 fi
-on_master "mkdir -p ~/$W/cands" && scp -q "$d"/in/chunk-*.jsonl "$MASTER:$W/cands/"
+base=$(cat "$d/BASE" 2>/dev/null) || { say "no data/v5/BASE: multisample-report must run first"; exit 1; }
+case "$base" in v4|v3) ;; *) say "data/v5/BASE is '$base', expected v4 or v3"; exit 1 ;; esac
+say "starting model: $base (patch-first inputs either way)"
+on_master "mkdir -p ~/$W/cands" && scp -q "$d"/in/chunk-*.jsonl "$d/BASE" "$MASTER:$W/cands/"
 : "${PEER_FAST:?PEER_FAST (peer address as seen from the master) missing from .status.env}"
 on_master "ssh -o BatchMode=yes $PEER_FAST mkdir -p $W/cands && scp -q ~/$W/cands/chunk-*.jsonl $PEER_FAST:$W/cands/"
 cluster_plan night-plan-cands.sh; rc=$?

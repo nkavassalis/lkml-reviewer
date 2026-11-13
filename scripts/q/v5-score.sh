@@ -17,7 +17,7 @@ PY
 export JUDGE_URL="${SERVE_URL%/models}/chat/completions"
 mins=$(( ${WINDOW_MINUTES_LEFT:-60} - 15 ))
 [ "$mins" -ge 20 ] || exit 75
-timeout "${mins}m" python3 "$QROOT/train/make_preferences.py" score "$d/cands.jsonl" --arm v4 \
+timeout "${mins}m" python3 "$QROOT/train/make_preferences.py" score "$d/cands.jsonl" --arm cand \
   --out "$d/scores.jsonl" --workers "${SCORE_WORKERS:-8}"; rc=$?
 [ $rc -eq 124 ] && { say "cut off at the window's end; resumes next window"; exit 75; }
 [ $rc -eq 0 ] || exit $rc

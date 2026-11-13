@@ -20,6 +20,14 @@ args=(--primary-marker '--- The patch ---' --context-marker '--- Earlier in this
     echo; echo "## ${1##*:} vs ${2##*:}"
     python3 "$QROOT/train/paired_stats.py" "$d/$1" "$d/$2" "${args[@]}"
   done
-} > "$d/MULTISAMPLE.md"
-"$QROOT/scripts/notify.sh" "[lkml-reviewer] Multi-sample evaluation: v3 vs v4" < "$d/MULTISAMPLE.md"
+} > "$d/MULTISAMPLE.md" || exit 1
+# Which model v5 starts from (PLAN-v5; rule set before the data, in choose_base.py).
+# v3 patch-first and v4 saw byte-identical inputs (data/v4/sft_eval.jsonl).
+python3 "$QROOT/train/paired_stats.py" "$d/ms-v3-patchfirst.jsonl:v3_pf" "$d/ms-v4.jsonl:v4" "${args[@]}" \
+  --json "$d/v3pf-vs-v4.json" > /dev/null || exit 1
+mkdir -p "$QROOT/data/v5"
+python3 "$QROOT/scripts/q/choose_base.py" "$d/v3pf-vs-v4.json" > "$d/v5-base.txt" || exit 1
+base=$(head -1 "$d/v5-base.txt"); echo "$base" > "$QROOT/data/v5/BASE"
+{ echo "## v5 starts from: $base"; echo; tail -n +2 "$d/v5-base.txt" | sed 's/^/- /'; echo; cat "$d/MULTISAMPLE.md"; } > "$d/MULTISAMPLE.email.md"
+"$QROOT/scripts/notify.sh" "[lkml-reviewer] Multi-sample evaluation: v3 vs v4; v5 starts from $base" < "$d/MULTISAMPLE.email.md"
 cat "$d/MULTISAMPLE.md"

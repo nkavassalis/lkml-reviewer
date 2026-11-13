@@ -164,3 +164,18 @@ so overwriting `night-run.sh` under the waiting v4 loop could run garbage.
 **Changed:** bracketed patterns (`'[c]ompare.py'`); updates copy to a temporary
 name and `mv`.
 **Generalizes:** yes: template OPERATIONS.md, the improvement queue.
+
+## 2026-11-13: Two different files were both called "patch-first"
+
+**Believed:** v3's patch-first multi-sample run and v4's would see the same
+inputs, so v3 patch-first vs v4 would isolate what v4's training added.
+**Evidence:** checksums differed. The Mac's file was an earlier rendering made
+for the input-order probe: 672 of 774 inputs differed (patch length budget, a
+blank line after the marker) and 58 references (older sign-off stripping).
+Found while wiring v5's starting-model decision to that comparison.
+**Changed:** the v3 patch-first run now uses v4's exact eval file
+(`data/v4/sft_eval.jsonl`; the probe's copy kept as
+`sft_eval_patchfirst.probe.jsonl` on the Mac). The probe's numbers stand, but
+they used the earlier rendering.
+**Generalizes:** yes: before a paired comparison, checksum the inputs; "the same
+layout" by name is not the same bytes.

@@ -91,6 +91,7 @@ def main() -> None:
     ap.add_argument("b", help="file.jsonl:KEY (the candidate)")
     ap.add_argument("--primary-marker")
     ap.add_argument("--context-marker")
+    ap.add_argument("--json", help="also write the all-inputs comparison here (for scripted decisions)")
     args = ap.parse_args()
     metrics = make_metrics(args.primary_marker, args.context_marker)
     a, b = load(args.a), load(args.b)
@@ -99,6 +100,9 @@ def main() -> None:
         slices[f"with '{args.context_marker}'"] = lambda r: args.context_marker in r["input"]
     for label, only in slices.items():
         res = compare(a, b, metrics, only)
+        if args.json and only is None:
+            with open(args.json, "w") as f:
+                json.dump({"a": a[0], "b": b[0], **res}, f, indent=1)
         print(f"\n## {label}: n={res['n']} inputs, samples per input {res['samples']}\n")
         print(f"| metric | {a[0]} | {b[0]} | difference (95% CI) | noise floor (95% CI) | real? |")
         print("|---|---|---|---|---|---|")

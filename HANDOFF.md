@@ -182,13 +182,17 @@ patch-first`). v3's as-trained data: `data/train/run-3b/`.
 2. `v4-mac-convert`: when the Mac is idle, merge + MLX 8-bit into `~/lkml-mac/v4`
    (frees disk by removing the stock mlx-community 8-bit model if < 90 GB free).
 3. `v4-multisample`: starts v4 × 200 patches × 3 samples on the Mac, detached.
-4. `v5-candidates` (window): 800 training patches (seeded, `data/v5/in/`), 4 v4
-   samples each, two chunks of 100 per round (one per node), via a GO_NOW
+4. `v5-candidates` (window, after `multisample-report`): 800 training patches
+   (seeded, `data/v5/in/`), 4 samples each from v5's starting model
+   (`data/v5/BASE`: v4 unless the report shows v4 clearly worse than v3
+   patch-first; PLAN-v5 "Which model v5 starts from"), two chunks of 100 per round (one per node), via a GO_NOW
    `night-run.sh` with `night-plan-cands.sh` (cluster-local copy in
    `data/cluster/`). ~4.5 h per round, two rounds a night: ~2 nights. Exits 75
    between windows ("Paused" email).
 5. `multisample-report`: when the Mac is idle: `paired_stats.py` v3-tf / v3-pf / v4
-   with noise floors → `data/train/multisample/MULTISAMPLE.md`, emailed.
+   with noise floors → `data/train/multisample/MULTISAMPLE.md`, emailed, plus
+   the v5 starting-model decision (`scripts/q/choose_base.py` → `data/v5/BASE`).
+   v3 patch-first and v4 use byte-identical inputs (`data/v4/sft_eval.jsonl`).
 6. `v5-score` (window): the judge (cluster vLLM) scores 3,200 candidates,
    resumable, cut at the window's end; then best-vs-worst pairs (gap ≥ 3) →
    `data/v5/pairs.jsonl`. Throughput unmeasured: expect 1–3 nights.

@@ -13,7 +13,7 @@ about what the patch does, and v3 vs v2 was a tie. Supervised fine-tuning
 training gives it one: show the model two of *its own* reviews of the same
 patch, one judged closer to the truth, and push it toward that one.
 
-## Method: DPO on the model's own samples, starting from v4
+## Method: DPO on the model's own samples, starting from v4 (by default; see below)
 
 1. **Candidates.** For N training patches (not held out), sample K reviews
    from v4 (sampling settings as in evaluation).
@@ -33,6 +33,27 @@ patch, one judged closer to the truth, and push it toward that one.
 
 DPO, not PPO/RL: no reward model to train, no online rollouts; a single
 offline pass over preference pairs. That suits nights on two GB10s.
+
+## Which model v5 starts from (rule set 2026-11-13, before the data)
+
+v5 starts from **v4 by default**. It starts from **v3 with patch-first input**
+instead only if the multi-sample comparison (200 held-out patches × 3
+samples, byte-identical patch-first inputs for both) shows v4 clearly worse:
+
+- its patch grounding is lower, with the whole 95% CI below zero, or
+- it loops more, with the whole 95% CI above zero.
+
+Why: DPO sharpens the model it starts from, so it should start from the better
+one; and the input-order probe showed v3 gets much of v4's gain just from the
+reordered input. A difference inside the noise keeps the default. v4's
+single-sample judge results don't enter the rule: they compare v4 against v3
+in its *thread-first* layout, which isn't the alternative here.
+
+Mechanics: the queue's `multisample-report` runs `scripts/q/choose_base.py`
+(tested) and writes `data/v5/BASE`; `v5-candidates` waits for it and samples
+from that model; the decision and its numbers are in the report email. The
+DPO step must use the same model for `--sft-adapter` (both the policy's
+starting point and the frozen reference).
 
 ## Costs (estimates; measured numbers in brackets)
 

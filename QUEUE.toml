@@ -27,21 +27,21 @@ after = ["v4-mac-convert"]
 when = "scripts/q/ready.sh mac"
 
 [[item]]
-id = "v5-candidates"
-title = "v5: generate 4 v4 reviews per patch for 800 training patches (cluster)"
-run = "scripts/q/v5-candidates.sh"
-est_min = 280          # one round of two chunks; resumes across windows (exit 75)
-after = ["v4-fetch"]
-when = "scripts/q/ready.sh cluster"
-window = true
-
-[[item]]
 id = "multisample-report"
 title = "Multi-sample report: v3 vs v4 with noise floors"
 run = "scripts/q/multisample-report.sh"
 est_min = 5
 after = ["v4-multisample"]
 when = "scripts/q/ready.sh mac"
+
+[[item]]
+id = "v5-candidates"
+title = "v5: generate 4 reviews per patch for 800 training patches (cluster)"
+run = "scripts/q/v5-candidates.sh"
+est_min = 280          # one round of two chunks; resumes across windows (exit 75)
+after = ["v4-fetch", "multisample-report"]   # the report picks the starting model (data/v5/BASE)
+when = "scripts/q/ready.sh cluster"
+window = true
 
 [[item]]
 id = "v5-score"
