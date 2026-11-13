@@ -72,7 +72,13 @@ survive the session, add a system cron entry on the monitoring box, e.g.
 - [ ] Memory cap set; peak memory from the smoke test well under it.
 - [ ] Checkpoints every ≤ 1 h of work, with optimizer state.
 - [ ] Serving stack stopped *by the chain script*, restored by its trap.
+- [ ] The smoke test runs against the **same paths and leftover state** as the
+      real run. lkml-reviewer's eval smoke test used a fresh directory name and
+      passed; the real run reused a directory a failed run had left half-full,
+      and `scp -r` nested the copy inside it. Clean up, or test in place.
 - [ ] Watcher started off-cluster, and its alert paths tested once.
+- [ ] Status checks **every node's GPU**, not just the master's logs: a peer
+      that crashes early sits idle while the master looks healthy.
 - [ ] Hourly status job scheduled; `.status.env` points at this run.
 - [ ] The person who owns the machines knows the expected downtime and ETA.
 

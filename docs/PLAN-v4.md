@@ -1,0 +1,68 @@
+# Plan: v4 (draft, pending v3's judge results)
+
+**Status:** criteria and candidate levers. The levers get picked once the v3
+blind-judge results are in (v3 vs v2, v3 vs base, Mac vs CUDA). Each row of
+the lever table below names the result that would trigger it.
+
+## What v3 showed so far (100 sampled held-out patches, 2026-11-13)
+
+| | Linus | base | v2 | v3 |
+|---|---|---|---|---|
+| median length (chars) | 924 | 2,064 | 437 | 362 |
+| names an identifier from the input | 39% | 90% | 33% | 22% |
+| chatbot-style phrasing | 20% | 49% | 6% | 3% |
+| abuse-filter flags | 0% | 51% | 8% | 2% |
+| signs "Linus" | 7% | 6% | 100% | **0%** |
+| loops (sampled) | 0% | 1% | 0% | 0% |
+| held-out loss (v3 eval set, CUDA BF16) | | 2.109 | (Mac run pending) | **1.872** |
+
+v3's 8-bit Mac build matched CUDA on every proxy except identifier-naming
+(34% vs 22%, borderline on n = 100), and scored 1.875 held-out loss on a
+150-row subset against CUDA's 1.872 on the full set.
+
+## Two diagnostics that already point at levers
+
+1. **v3 was trained on shorter replies than Linus writes.** His reply length
+   is stable across eras (median 755–950 chars per 5-year band, 2005–2026),
+   but v3's training targets have a median of **620**, against **906** on the
+   held-out set. The wider v3 gate likely admitted more short discussion
+   replies. A model trained on short targets writes short replies.
+2. **Thread context pulls v3 off the patch.** On the 87 patches with thread
+   context, v3 names something from the *patch* 8% of the time (v2 24%,
+   Linus 26%). On the 13 without, 31%. v3 appears to answer the discussion and
+   forget the code.
+
+Both are one sample per patch on a crude proxy: suggestive, not proven.
+
+## v4 criteria (set before training, like v3's)
+
+**Gates, no regression allowed:** 0% sign-offs and email addresses;
+abuse-filter rate ≤ Linus' own; 0% loops when sampled; low chatbot phrasing;
+the Mac 8-bit build ties CUDA in the blind judge.
+
+**Targets, measured against v3:**
+- blind judge win rate vs v3 and vs base, with the reasons tallied by type
+  (false claim / generic / missed the reference's point / answered the
+  thread instead of the patch);
+- naming something from the **patch** at a rate closer to Linus' 26–39%;
+- median length closer to his ~900 chars, with substance rather than padding;
+- held-out loss on the same eval set as v3 (like for like);
+- if possible, 30 blind human ratings (base / v3 / v4).
+
+## Candidate levers
+
+| if v3's results show… | v4 change |
+|---|---|
+| short, thin replies because the targets are (diagnostic 1) | rebalance the data: drop or down-weight short replies with no technical content until train and held-out lengths match (`ft27b shift`-style check before training) |
+| it answers the thread, not the patch (diagnostic 2) | patch first, thread second, each with its own token budget; trim the thread, never the patch |
+| truncated inputs score worse | keep every file's hunks instead of cutting the tail, or 6k context if memory allows |
+| more false claims than v2 (judge reasons) | preference training: sample v3 several times per patch, rank against Linus' reply with the judge, DPO on chosen vs rejected |
+| the Mac build loses to CUDA | change quantization (group size, mixed precision), not the training |
+| only cosmetic issues remain | v4 is just the cleaned data (sign-off lines now stripped everywhere) |
+
+## Process
+
+Same as v3: write the chosen levers and criteria here before training;
+smoke-test the **whole** chain (training, copies, evaluation) at tiny sizes;
+watcher plus hourly status; one epoch; same LoRA config, so differences come
+from the data.

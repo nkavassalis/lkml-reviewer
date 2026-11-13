@@ -56,7 +56,7 @@ linuspr/template.py  the prompt format, shared by export and reviewer; a test fa
                 if train/sft_lora.py's copy drifts
 docs/           OPERATIONS.md (long jobs on shared machines: restore traps,
                 memory caps, resume, watcher + hourly status runs; read it before
-                any long run), REPORT.md (results + learnings), PLAN-v3.md,
+                any long run), REPORT.md (results + learnings), PLAN-v3.md, PLAN-v4.md (draft),
                 CONVERSION.md (adapter -> merged BF16 -> MLX 8-bit; the standard
                 last stage for every model, targeting a 64 GB M4 Pro)
 HANDOFF.md      where the last session actually stopped — read it alongside this file

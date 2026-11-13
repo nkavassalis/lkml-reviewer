@@ -40,12 +40,29 @@ if [ -n "${t:-}" ]; then
   esac
 fi
 
+# A run stage is active (training or evaluating, not yet finished)? Memory floors
+# and GPU-idle checks only mean something then: with the serving stack up,
+# ~10 GB available per node is normal by design.
+busy_stage=0
+case "${t:-}" in *"training"*|*"evaluating"*) case "${t:-}" in *"chain finished"*|*"start issued"*) ;; *) busy_stage=1 ;; esac ;; esac
+
 # --- memory on each node --------------------------------------------------------
 for host in "$MASTER" $PEER; do
   avail=$(remote "$host" "awk '/MemAvailable/ {print int(\$2/1048576)}' /proc/meminfo") \
     || { flag "$host unreachable"; continue; }
   echo "mem:   $host available ${avail} GB"
-  [ "$avail" -lt 15 ] && flag "$host has only ${avail} GB available"
+  [ $busy_stage = 1 ] && [ "$avail" -lt 15 ] && flag "$host has only ${avail} GB available during a run"
+done
+
+# --- GPU activity on each node -----------------------------------------------------
+# The master's logs can look healthy while a peer sits idle: lkml-reviewer's
+# eval had a peer's arm crash 6 min in and sit idle for 75 min, noticed only from
+# its free memory. While a stage should be using every node, an idle GPU is a
+# finding.
+for host in "$MASTER" $PEER; do
+  procs=$(remote "$host" "nvidia-smi --query-compute-apps=pid --format=csv,noheader 2>/dev/null | wc -l") || continue
+  echo "gpu:   $host ${procs} compute process(es)"
+  [ $busy_stage = 1 ] && [ "${procs:-0}" -eq 0 ] && flag "$host GPU is idle during a stage that should be using it"
 done
 
 # --- serving stack ----------------------------------------------------------------
