@@ -1,0 +1,68 @@
+# lkml-reviewer improvement queue: run by scripts/queue-runner.sh on the
+# monitoring box, one item at a time, emails at each step (docs/OPERATIONS.md,
+# "The improvement queue"). Item scripts read hosts from .status.env.
+# Edit freely: add, reorder, remove. State is in data/queue/state.json.
+
+[[item]]
+id = "v4-fetch"
+title = "Fetch v4 results and adapter from the cluster"
+run = "scripts/q/v4-fetch.sh"
+est_min = 5
+when = "scripts/q/ready.sh v4done"
+
+[[item]]
+id = "v4-mac-convert"
+title = "Build v4 MLX 8-bit on the Mac"
+run = "scripts/q/v4-mac-convert.sh"
+est_min = 75
+after = ["v4-fetch"]
+when = "scripts/q/ready.sh mac"
+
+[[item]]
+id = "v4-multisample"
+title = "Start v4 multi-sample generation on the Mac (200 patches x 3)"
+run = "scripts/q/v4-multisample.sh"
+est_min = 3
+after = ["v4-mac-convert"]
+when = "scripts/q/ready.sh mac"
+
+[[item]]
+id = "v5-candidates"
+title = "v5: generate 4 v4 reviews per patch for 800 training patches (cluster)"
+run = "scripts/q/v5-candidates.sh"
+est_min = 280          # one round of two chunks; resumes across windows (exit 75)
+after = ["v4-fetch"]
+when = "scripts/q/ready.sh cluster"
+window = true
+
+[[item]]
+id = "multisample-report"
+title = "Multi-sample report: v3 vs v4 with noise floors"
+run = "scripts/q/multisample-report.sh"
+est_min = 5
+after = ["v4-multisample"]
+when = "scripts/q/ready.sh mac"
+
+[[item]]
+id = "v5-score"
+title = "v5: judge scores every candidate, then best-vs-worst pairs"
+run = "scripts/q/v5-score.sh"
+est_min = 60           # uses whatever the window has left; resumes (exit 75)
+after = ["v5-candidates"]
+when = "scripts/q/ready.sh cluster"
+window = true
+
+[[item]]
+id = "v5-check-pack"
+title = "v5: reading pack of 20 preference pairs"
+run = "scripts/q/v5-check-pack.sh"
+est_min = 2
+after = ["v5-score"]
+
+[[item]]
+id = "v5-human-check"
+title = "v5: read 20 pairs in data/v5/CHECK.md (is CHOSEN really better?)"
+run = "true"
+after = ["v5-check-pack"]
+gate = "human"
+# After approval: add v5-dpo-smoke, v5-dpo-train, v5-eval here (docs/PLAN-v5.md).

@@ -159,14 +159,44 @@ much of the layout effect needs no retraining.
 Analyse with `train/paired_stats.py A:v3_tf B:v3_pf --primary-marker '--- The
 patch ---' --context-marker '--- Earlier in this thread'` (noise floor included).
 
-**Prepared, not scheduled:** v5 = DPO for accuracy (`docs/PLAN-v5.md`;
-`train/dpo_core.py` tested, `make_preferences.py` tested offline,
-`dpo_lora.py` drafted). Needs Nick's go-ahead: ~5 nights plus judge load.
-When v4's results arrive, evaluate v4 with the multi-sample method too (convert
-it with `scripts/convert-mlx.sh`, generate 200 × 3 on the Mac) before deciding.
+**Queued (Nick, 2026-11-13: "queue those work items to happen after v4"):**
+v5 = DPO for accuracy (`docs/PLAN-v5.md`; `train/dpo_core.py` tested,
+`make_preferences.py` tested offline, `dpo_lora.py` drafted). See §4e.
 
 v4 data: `data/v4/sft*.jsonl` (patch-first layout, `export --layout
 patch-first`). v3's as-trained data: `data/train/run-3b/`.
+
+## 4e. The improvement queue (after v4), from 2026-11-13
+
+`QUEUE.toml` + `scripts/queue-runner.sh` on this box (supervised loop, every
+5 min; `scripts/queue-runner.sh status|stop|start`; state and logs in
+`data/queue/`). Items, in order, each emailing Started / Done / FAILED:
+
+1. `v4-fetch`: when `RESULTS-v4.md` exists and the cluster is idle, copy run-4's
+   adapter, logs and judge files to `data/train/run-4/`.
+2. `v4-mac-convert`: when the Mac is idle, merge + MLX 8-bit into `~/lkml-mac/v4`
+   (frees disk by removing the stock mlx-community 8-bit model if < 90 GB free).
+3. `v4-multisample`: starts v4 × 200 patches × 3 samples on the Mac, detached.
+4. `v5-candidates` (window): 800 training patches (seeded, `data/v5/in/`), 4 v4
+   samples each, two chunks of 100 per round (one per node), via a GO_NOW
+   `night-run.sh` with `night-plan-cands.sh` (cluster-local copy in
+   `data/cluster/`). ~4.5 h per round, two rounds a night: ~2 nights. Exits 75
+   between windows ("Paused" email).
+5. `multisample-report`: when the Mac is idle: `paired_stats.py` v3-tf / v3-pf / v4
+   with noise floors → `data/train/multisample/MULTISAMPLE.md`, emailed.
+6. `v5-score` (window): the judge (cluster vLLM) scores 3,200 candidates,
+   resumable, cut at the window's end; then best-vs-worst pairs (gap ≥ 3) →
+   `data/v5/pairs.jsonl`. Throughput unmeasured: expect 1–3 nights.
+7. `v5-check-pack`: `data/v5/CHECK.md`, 20 pairs to read, emailed.
+8. `v5-human-check` (**human gate**, emails "Needs you"): read the pack; approve
+   with `python3 train/workqueue.py approve v5-human-check`. Then add the DPO
+   smoke, DPO training and v5 eval items (they need chain support for
+   `dpo_lora.py`, not written yet).
+
+A failed item halts the queue (`workqueue.py reset ID` to retry, `skip ID`).
+Tested: the v5 data path end to end against a fake judge (chunking, merge,
+scoring, pairs, check pack); the runner's email sequence (tests/test_workqueue.py).
+Not tested against the real cluster: `v5-candidates`' plan and the Mac items.
 
 ## 5. Next actions
 

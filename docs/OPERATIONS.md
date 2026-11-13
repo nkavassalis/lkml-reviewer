@@ -91,6 +91,28 @@ at 14:00" in a healthy log line matched as a failure, and one failure produced
 several emails as the log grew. Then send one real message and check it
 arrived.
 
+## The improvement queue
+
+Work that follows a run (fetch, convert, evaluate, generate data for the next
+version) goes in `QUEUE.toml` and runs unattended from this box:
+`scripts/queue-runner.sh start`. One item at a time, in file order, each with
+prerequisites (`after`), a readiness check (`when`, e.g. `scripts/q/ready.sh
+cluster`), and optionally `window = true` (starts only inside the maintenance
+window, and only if `est_min` fits). Item scripts live in `scripts/q/` and read
+hosts from `.status.env`. Rules learned building it:
+
+- **Exit 75 means "resume next window"**, not failure: long generation and
+  judging steps stop at the hard stop and continue the next night.
+- **A failure halts the queue** and emails the log tail. Unattended retries of a
+  broken step waste nights.
+- **Detach long jobs that don't need the queue's attention** (Mac sampling,
+  ~10 h): the item starts them and returns, and a later item waits for them via
+  `when`. Otherwise a day job holds up the night's cluster work.
+- **Human gates** (`gate = "human"`) email "Needs you" once and wait for
+  `python3 train/workqueue.py approve ID`.
+- `pgrep -f` over ssh matches the remote shell running it: bracket a letter
+  (`'[c]ompare.py'`).
+
 ## Monitoring: two layers, different jobs
 
 | layer | what | cadence | purpose |

@@ -60,7 +60,8 @@ if [ "$opens" -gt "$(date +%s)" ]; then
 fi
 deadline=$(window_deadline)
 if [ "${GO_NOW:-0}" = 1 ]; then
-  if [ -n "${MAX_HOURS:-}" ]; then deadline=$(( $(date +%s) + MAX_HOURS * 3600 ))
+  if [ -n "${MAX_MINUTES:-}" ]; then deadline=$(( $(date +%s) + MAX_MINUTES * 60 ))
+  elif [ -n "${MAX_HOURS:-}" ]; then deadline=$(( $(date +%s) + MAX_HOURS * 3600 ))
   else deadline=$(( $(date +%s) + 365 * 86400 )); fi
   window_open || say "GO_NOW: running OUTSIDE the maintenance window, by request"
   say "GO_NOW: started now; hard stop at $(TZ=$WINDOW_TZ date -d @"$deadline" '+%F %T')${MAX_HOURS:+ (MAX_HOURS=$MAX_HOURS)}; running $PLAN"
