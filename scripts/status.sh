@@ -28,13 +28,15 @@ t=$(remote "$MASTER" "
   echo \"step:  \$(grep -E 'step [0-9]+/' \$L 2>/dev/null | tail -1)\"
   echo \"ckpt:  \$(grep -E 'checkpoint at step' \$L 2>/dev/null | tail -1)\"
   echo \"eval:  \$(grep -E 'eval loss' \$L 2>/dev/null | tail -1)\"
-  echo \"age:   \$(( \$(date +%s) - \$(stat -c %Y \$L 2>/dev/null || echo 0) ))\"
+  newest=\$(ls -t \$C \$L ~/$WORKDIR/$RUN*.out ~/$WORKDIR/runs/$RUN*.out 2>/dev/null | head -1)
+  echo \"active: \$(basename \"\$newest\" 2>/dev/null)\"
+  echo \"age:   \$(( \$(date +%s) - \$(stat -c %Y \"\$newest\" 2>/dev/null || echo 0) ))\"
 ") || flag "master unreachable over ssh"
 if [ -n "${t:-}" ]; then
   echo "$t" | grep -v '^age:' | cut -c1-170
   age=$(echo "$t" | awk '/^age:/ {print $2}')
   case "$t" in *"start issued"*) echo "run: FINISHED (serving restore issued)" ;; *)
-    [ "${age:-99999}" -gt 1800 ] && flag "training log hasn't moved for $((age / 60)) min" ;;
+    [ "${age:-99999}" -gt 1800 ] && flag "no run log has moved for $((age / 60)) min" ;;
   esac
 fi
 
