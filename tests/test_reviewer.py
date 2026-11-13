@@ -392,3 +392,10 @@ def test_mlx_backend_needs_a_model(tmp_path, monkeypatch):
     with pytest.raises(SystemExit) as e:
         main(["--diff-file", str(f), "--backend", "mlx"])
     assert e.value.code == 4
+
+
+def test_reviewer_never_prints_a_linus_signature(fake_gh, fake_model, capsys):
+    fake_model("This is wrong.\n\n\t\tLinus\n---\n fs/x.c | 2 +-\n")
+    assert main(["--pr", "7", "--repo", "alice/r", "--adapter", "x"]) == 0
+    out = capsys.readouterr().out
+    assert "Linus" not in out and "This is wrong." in out and "fs/x.c" in out

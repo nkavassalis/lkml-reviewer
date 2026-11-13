@@ -51,6 +51,10 @@ BOOKKEEPING_MAX_CHARS = 400
 TREE_STATE_MAX_CHARS = 200
 # [^\S\n] = any whitespace except newline: hypermail indents with &nbsp; too.
 _SIGNOFF_RE = re.compile(r"\n[^\S\n]*Linus[^\S\n]*\Z")
+# A signature line *inside* the reply: Linus often signs, then attaches a patch
+# ("Linus" / "---" / diffstat / diff). The end-only rule missed these, and v3
+# learned to sign ~6% of the time when it suggests code.
+_SIGNATURE_LINE_RE = re.compile(r"(?m)^[^\S\n]*Linus[^\S\n]*\n(?=\s*\S)")
 
 # The hypermail mirror replaces the *domain* of every local address with x's:
 # `Peter Zijlstra <peterz@xxxxxxxxxxxxx>`, bare `zhouzhouyi@xxxxxxxxx`. Six
@@ -153,7 +157,7 @@ def strip_attributions(text: str) -> str:
 def strip_signoff(text: str) -> str:
     """Drop a trailing bare "Linus" signature. It is his style, but a model that
     signs every review with a real person's name is an impersonation tool."""
-    text = text.rstrip()
+    text = _SIGNATURE_LINE_RE.sub("", text.rstrip())
     while True:  # some messages carry the signature twice
         stripped = _SIGNOFF_RE.sub("", text).rstrip()
         if stripped == text:

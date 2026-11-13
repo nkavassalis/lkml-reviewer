@@ -167,6 +167,11 @@ def main(argv: list[str] | None = None) -> int:
                   f"generated {st['generation_tokens']} tok @ {st['generation_tps']:.1f} tok/s, "
                   f"peak memory {st['peak_memory_gb']:.1f} GB", file=sys.stderr)
 
+    # The model can still sign as "Linus" (v3: ~6% of its training targets had a
+    # signature before an attached patch). Never print or post one.
+    from linuspr.pairs import strip_signoff  # noqa: PLC0415
+    reviews = [strip_signoff(r) for r in reviews]
+
     parts = []
     for (path, _, _), review in zip(units, reviews, strict=True):
         parts.append(f"### `{path}`\n\n{review}" if path else review)

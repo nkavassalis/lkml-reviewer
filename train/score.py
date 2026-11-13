@@ -22,7 +22,9 @@ ASSISTANT_RE = re.compile(
     re.I | re.M,
 )
 ATTRIB_RE = re.compile(r"^\s*On .{0,120}wrote:", re.M)
-SIGN_RE = re.compile(r"\n\s*Linus\s*$")
+# Anywhere, not just at the end: he often signs and then attaches a patch.
+SIGN_RE = re.compile(r"^[^\S\n]*Linus[^\S\n]*$", re.M)
+EMAIL_RE = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")
 
 
 def loops(text: str) -> bool:
@@ -45,7 +47,8 @@ def metrics(rows: list[dict], key: str) -> dict[str, float]:
         "assistant-style formatting/phrases": sum(bool(ASSISTANT_RE.search(o)) for o in out) / n,
         "flagged by abuse filter (scrub|drop)": sum(classify(o).action != "keep" for o in out) / n,
         "starts with 'On ... wrote:'": sum(bool(ATTRIB_RE.match(o)) for o in out) / n,
-        "signs off 'Linus'": sum(bool(SIGN_RE.search(o)) for o in out) / n,
+        "signs 'Linus' (anywhere)": sum(bool(SIGN_RE.search(o)) for o in out) / n,
+        "contains an email address": sum(bool(EMAIL_RE.search(o)) for o in out) / n,
         "repeats a line 3+ times (loop)": sum(loops(o) for o in out) / n,
     }
 

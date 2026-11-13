@@ -139,3 +139,15 @@ def test_quoted_vger_trailer_lines_are_removed():
     from linuspr.pairs import strip_list_footers
     text = " #else\n\n> --\n> To unsubscribe from this list: send the line x in\n> the body of a message to majordomo@x\n"
     assert "majordomo" not in strip_list_footers(text) and "#else" in strip_list_footers(text)
+
+
+def test_signature_before_an_attached_patch_is_stripped_patch_kept():
+    text = "Are there other callers?\n\n\t\tLinus\n---\n fs/x.c | 2 ++\n\ndiff --git a/fs/x.c b/fs/x.c\n"
+    out = strip_signoff(text)
+    assert "Linus" not in out
+    assert out.startswith("Are there other callers?") and "diff --git a/fs/x.c" in out
+
+
+def test_linus_inside_a_sentence_is_untouched():
+    text = "Ask Linus about this.\nIt matters."
+    assert strip_signoff(text) == text
