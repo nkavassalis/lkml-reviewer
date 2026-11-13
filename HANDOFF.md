@@ -153,6 +153,18 @@ then it stops itself. A test email was sent and confirmed in the Sent folder.
 `data/train/run-3b/compare-v3-mlx.jsonl` using `slice.py` (template) to see how
 much of the layout effect needs no retraining.
 
+**Also running on the Mac (no cluster):** `~/lkml-mac/multi-sample-queue.sh`:
+3 samples per patch on 200 held-out patches for v3, thread-first
+(`ms-v3-threadfirst.jsonl`) and patch-first (`ms-v3-patchfirst.jsonl`), ~10 h.
+Analyse with `train/paired_stats.py A:v3_tf B:v3_pf --primary-marker '--- The
+patch ---' --context-marker '--- Earlier in this thread'` (noise floor included).
+
+**Prepared, not scheduled:** v5 = DPO for accuracy (`docs/PLAN-v5.md`;
+`train/dpo_core.py` tested, `make_preferences.py` tested offline,
+`dpo_lora.py` drafted). Needs Nick's go-ahead: ~5 nights plus judge load.
+When v4's results arrive, evaluate v4 with the multi-sample method too (convert
+it with `scripts/convert-mlx.sh`, generate 200 × 3 on the Mac) before deciding.
+
 v4 data: `data/v4/sft*.jsonl` (patch-first layout, `export --layout
 patch-first`). v3's as-trained data: `data/train/run-3b/`.
 
