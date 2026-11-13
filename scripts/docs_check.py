@@ -114,9 +114,11 @@ def check_handoff() -> list[str]:
     h = ROOT / "HANDOFF.md"
     if not h.exists():
         return []
-    m = re.search(r"^## .*Status \((\d{4}-\d\d-\d\d)\)", h.read_text(), re.M)
+    m = re.search(r"^## .*Status \((\d{4}-\d\d-\d\d|YYYY-MM-DD)\)", h.read_text(), re.M)
     if not m:
         return ["HANDOFF.md: needs a '## ... Status (YYYY-MM-DD)' heading"]
+    if m.group(1) == "YYYY-MM-DD":
+        return []                             # an unfilled template
     status = dt.date.fromisoformat(m.group(1))
     dirs = [d for d in CODE_DIRS if (ROOT / d).exists()]
     out = subprocess.run(["git", "log", "-1", "--format=%cs", "--", *dirs], cwd=ROOT,
