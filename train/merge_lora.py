@@ -121,8 +121,10 @@ def main() -> None:
         if f.suffix in COPY_SUFFIXES and not f.name.startswith("adapter_"):
             shutil.copy2(f, out / f.name)
     (out / "MERGE_INFO.json").write_text(json.dumps({
-        "base": args.base, "base_dir": str(base),
-        "adapter": str(adapter), "adapter_sha256": sha256(adapter / "adapter_model.safetensors"),
+        # No local paths: this file ships with published models. The snapshot
+        # directory's name is the HF revision; that's the provenance that matters.
+        "base": args.base, "base_revision": base.name,
+        "adapter": adapter.name, "adapter_sha256": sha256(adapter / "adapter_model.safetensors"),
         "modules_merged": len(merged), "scale": scale, "formula": "W + scale * B @ A (fp32)",
     }, indent=2))
     print(f"merged {len(merged)}/{len(pairs)} modules -> {out}")
