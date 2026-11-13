@@ -24,6 +24,31 @@ Use it as the default for future projects of this kind.
 4. **Watch it from somewhere else.** Monitoring that runs on the node being
    watched dies with it. See below.
 
+## Overnight maintenance windows (optional)
+
+If the GPUs serve something by day, agree a window with whoever owns them,
+then let a script keep to it instead of a person. lkml-reviewer's is 20:00–08:00
+Eastern, cluster time.
+
+- **`train/night-run.sh`** waits for the window, runs a plan (a bash script of
+  steps, see `train/night-plan.example.sh`), and at the **hard stop** (window
+  end minus a margin, default 20 min) terminates whatever is still running. The
+  chains' EXIT traps restore serving, and the launcher then checks serving is
+  up on every node itself, as a safety net. Configure it with environment variables (`WINDOW_START`, `WINDOW_END`, `WINDOW_TZ`, `STOP_MARGIN_MIN`).
+- **Steps that can't fit are skipped, never started.** In a plan, guard each
+  step with `need_minutes <estimate> "<what>"` (`train/window-lib.sh`).
+- **Long runs span nights.** `sft_lora.py --resume-auto` continues from the
+  last checkpoint (each records its step), and reuses the before-training
+  eval loss instead of recomputing it. A 15-hour run becomes two nights.
+- **Launching for tonight from the morning:** set `WAIT_FOR_NEXT_WINDOW=1`.
+  An overnight window is technically still *open* at 06:00, and without it the
+  plan would start at once with minutes left. (The tests caught this.)
+- **Outside the window, ask.** The window is the agreement; anything beyond
+  it needs the owner's OK, every time.
+- Tested: `tests/test_window.py` checks the arithmetic at fixed times with a
+  test clock (`WINDOW_NOW`), and the launcher's hard stop, trap and safety net
+  were exercised end to end against a fake `docker`.
+
 ## Monitoring: two layers, different jobs
 
 | layer | what | cadence | purpose |

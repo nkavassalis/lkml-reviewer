@@ -168,6 +168,10 @@ def main() -> None:
                     help="adapter dir from a previous run (adapter-latest)")
     ap.add_argument("--resume-step", type=int, default=0,
                     help="optimizer step that adapter was saved at")
+    ap.add_argument("--resume-auto", action="store_true",
+                    help="if OUT/adapter-latest exists and OUT/adapter-final doesn't, resume "
+                         "from it (its STEP file says where): lets a run span several "
+                         "maintenance windows (train/night-run.sh)")
     ap.add_argument("--base-eval-loss", type=float, default=None,
                     help="skip the before-training eval and report this value instead")
     args = ap.parse_args()
@@ -179,6 +183,19 @@ def main() -> None:
 
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
+    if args.resume_auto and not args.resume_from:
+        latest = out / "adapter-latest"
+        if (out / "adapter-final").exists():
+            print(f"{out}/adapter-final exists: this run is already complete", flush=True)
+            return
+        if (latest / "STEP").exists():
+            args.resume_from, args.resume_step = str(latest), int((latest / "STEP").read_text())
+            # don't spend a night's window recomputing the before-training eval
+            if args.base_eval_loss is None and (out / "train.log").exists():
+                import re as _re
+                m = _re.findall(r"eval loss BEFORE training: ([0-9.]+)", (out / "train.log").read_text())
+                if m:
+                    args.base_eval_loss = float(m[0])
     fh = open(out / "train.log", "a")  # noqa: SIM115 — lives for the whole run
     log(fh, f"args {vars(args)} world_size {WORLD}")
     total_mem = torch.cuda.get_device_properties(0).total_memory / 1e9
@@ -305,6 +322,7 @@ def main() -> None:
         if args.save_every and step % args.save_every == 0 and RANK == 0:
             core.save_pretrained(out / "adapter-latest")
             torch.save(opt.state_dict(), out / "adapter-latest" / "optimizer.pt")
+            (out / "adapter-latest" / "STEP").write_text(str(step))
             log(fh, f"checkpoint at step {step} -> {out / 'adapter-latest'}")
         if step % steps_per_epoch == 0 or step == total_steps:
             ev, _ = eval_loss(core, evald, fh)

@@ -37,6 +37,9 @@ restore() {
   say "start issued on all nodes"
 }
 trap restore EXIT
+# A stop signal (the window's hard stop, a kill) becomes a normal exit, so the
+# EXIT trap above runs and serving is restored.
+trap 'exit 143' TERM INT
 set -e
 
 say "stopping $SERVE_CTR"

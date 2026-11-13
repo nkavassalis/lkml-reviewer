@@ -57,6 +57,9 @@ restore() {
   say "start issued on both nodes"
 }
 trap restore EXIT
+# A stop signal (the window's hard stop, a kill) becomes a normal exit, so the
+# EXIT trap above runs and serving is restored.
+trap 'exit 143' TERM INT
 set -e
 
 NCCL_ENV=(-e "NCCL_SOCKET_IFNAME=$IFACE" -e "GLOO_SOCKET_IFNAME=$IFACE" -e NCCL_IB_DISABLE=1
