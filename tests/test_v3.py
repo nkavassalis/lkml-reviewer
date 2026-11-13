@@ -151,3 +151,31 @@ def test_signature_before_an_attached_patch_is_stripped_patch_kept():
 def test_linus_inside_a_sentence_is_untouched():
     text = "Ask Linus about this.\nIt matters."
     assert strip_signoff(text) == text
+
+
+# --- v4 layout: patch first, each section on its own budget ----------------------
+
+def test_patch_first_layout_orders_patch_before_thread():
+    from linuspr.template import PATCH_HEADER, THREAD_HEADER, build_input
+    text = build_input("Re: [PATCH] x", "diff --git a/a b/a\n+x", "[Al]:\nno", layout="patch-first")
+    assert text.index(PATCH_HEADER) < text.index("diff --git") < text.index(THREAD_HEADER) < text.index("[Al]")
+
+
+def test_thread_first_is_still_the_default_and_unchanged():
+    from linuspr.template import build_input
+    assert build_input("s", "P", "T") == "Subject: s\n\n--- Earlier in this thread (most recent last) ---\nT\n\n--- The patch ---\n\nP"
+
+
+def test_fit_patch_keeps_the_head_of_every_file():
+    from linuspr.template import fit_patch
+    files = "".join(f"diff --git a/f{i}.c b/f{i}.c\n" + "+line\n" * 400 for i in range(5))
+    out = fit_patch(files, budget=3000)
+    assert len(out) <= 3000 + 40
+    assert all(f"diff --git a/f{i}.c" in out for i in range(5))   # no file dropped
+
+
+def test_fit_thread_keeps_the_most_recent_messages():
+    from linuspr.template import fit_thread
+    thread = "\n\n".join(f"[Person {i}]:\n" + "word " * 60 for i in range(10))
+    out = fit_thread(thread, budget=900)
+    assert "[Person 9]" in out and "[Person 0]" not in out and len(out) <= 900

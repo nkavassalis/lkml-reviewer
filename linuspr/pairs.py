@@ -104,7 +104,7 @@ class ReviewPair:
     resolved_context: str = ""
     thread_context: str = ""  # earlier messages in the thread (v3), see context.py
 
-    def as_sft(self, *, keep_signoff: bool = False) -> dict[str, str]:
+    def as_sft(self, *, keep_signoff: bool = False, layout: str = "thread-first") -> dict[str, str]:
         """Shape used for chat/SFT export: patch context in, review out.
 
         Mangled mirror emails are scrubbed here and only here — the corpus and
@@ -116,7 +116,7 @@ class ReviewPair:
         from .template import build_input  # noqa: PLC0415  (one source of truth)
 
         context = self.resolved_context or self.context
-        user = build_input(self.subject, context, self.thread_context)
+        user = build_input(self.subject, context, self.thread_context, layout=layout)
         review = strip_attributions(strip_list_footers(self.review))
         if not keep_signoff:
             review = strip_signoff(review)

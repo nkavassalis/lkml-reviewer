@@ -179,7 +179,7 @@ def cmd_export(args: argparse.Namespace) -> int:
         rows = (held if held_out else train)[: args.limit]
         with path.open("w", encoding="utf-8") as fh:
             for pr in rows:
-                fh.write(json.dumps(pr.as_sft(keep_signoff=args.keep_signoff),
+                fh.write(json.dumps(pr.as_sft(keep_signoff=args.keep_signoff, layout=args.layout),
                                     ensure_ascii=False) + "\n")
         print(f"wrote {len(rows)} pairs to {path}")
     print(f"eval years {list(eval_years)} -> {len(held)} held-out pairs")
@@ -437,6 +437,8 @@ def main(argv: list[str] | None = None) -> int:
     )
     e.add_argument("--keep-signoff", action="store_true",
                    help='keep the trailing "Linus" signature (v2 behaviour)')
+    e.add_argument("--layout", choices=["thread-first", "patch-first"], default="thread-first",
+                   help="input layout: thread-first (v3) or patch-first (v4)")
     e.add_argument("--no-thread", action="store_true",
                    help="ignore data/thread_context.json (v2 behaviour)")
     e.add_argument(

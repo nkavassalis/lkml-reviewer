@@ -12,7 +12,18 @@
 # Exit status: 0 all normal, 1 something needs attention (printed as ATTENTION).
 set -u
 root="$(cd "$(dirname "$0")/.." && pwd)"
-[ -f "$root/.status.env" ] && . "$root/.status.env"
+# .status.env supplies defaults only: anything already set in the environment
+# wins (so a test can point at a scratch dir or NOTIFY_CMD=cat without editing it).
+load_env() {
+  local line key
+  while IFS= read -r line || [ -n "$line" ]; do
+    case "$line" in ''|\#*) continue ;; esac
+    key=${line%%=*}
+    [[ "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || continue
+    [ -n "${!key+x}" ] || eval "$line"
+  done < "$1"
+}
+[ -f "$root/.status.env" ] && load_env "$root/.status.env"
 : "${MASTER:?set MASTER in .status.env}" "${RUN:?set RUN in .status.env}"
 PEER=${PEER:-}; WORKDIR=${WORKDIR:-linuspr-train}; WATCH_LOG=${WATCH_LOG:-}
 attention=0
@@ -36,7 +47,9 @@ if [ -n "${t:-}" ]; then
   echo "$t" | grep -v '^age:' | cut -c1-170
   age=$(echo "$t" | awk '/^age:/ {print $2}')
   case "$t" in *"start issued"*) echo "run: FINISHED (serving restore issued)" ;; *)
-    [ "${age:-99999}" -gt 1800 ] && flag "no run log has moved for $((age / 60)) min" ;;
+    # only a stall while a stage is running; before a run starts there's no log yet
+    case "$t" in *"training"*|*"evaluating"*)
+      [ "${age:-99999}" -gt 1800 ] && flag "no run log has moved for $((age / 60)) min" ;; esac ;;
   esac
 fi
 

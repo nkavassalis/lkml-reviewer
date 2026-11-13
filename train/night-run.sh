@@ -15,6 +15,11 @@
 # 4. Safety net, whatever happened: makes sure SERVE_CTR is running on this
 #    node and on PEER before it exits.
 #
+# Run now instead ("go for it"): GO_NOW=1 starts immediately, inside the window
+# or not, with a hard stop after MAX_HOURS (unset = no hard stop). Running
+# outside the agreed window needs the machines' owner's OK; the log records
+# that it was started by request. Reporting is identical either way.
+#
 # Logs to runs/night-YYYY-MM-DD.log (or ./night-*.log without runs/).
 set -u
 here="$(cd "$(dirname "$0")" && pwd)"
@@ -23,7 +28,13 @@ here="$(cd "$(dirname "$0")" && pwd)"
 PEER=${PEER:-}
 SERVE_CTR=${SERVE_CTR:-vllm_fp4local}
 LOGDIR=${LOGDIR:-$( [ -d runs ] && echo runs || echo . )}
-LOG="$LOGDIR/night-$(TZ=$WINDOW_TZ date +%F).log"
+if [ "${GO_NOW:-0}" = 1 ]; then
+  LOG="$LOGDIR/now-$(TZ=$WINDOW_TZ date +%F-%H%M).log"
+else
+  LOG="$LOGDIR/night-$(TZ=$WINDOW_TZ date +%F).log"
+fi
+# Reporters follow this link, so they track the current run in either mode.
+ln -sf "$(basename "$LOG")" "$LOGDIR/latest-run.log"
 say() { echo "[$(TZ=$WINDOW_TZ date '+%F %T')] $*" >> "$LOG"; }
 
 ensure_serving() {
@@ -40,14 +51,22 @@ ensure_serving() {
 
 # WAIT_FOR_NEXT_WINDOW=1: don't use a window that is already open (launching
 # in the morning for tonight would otherwise start at once, with minutes left).
-if [ "${WAIT_FOR_NEXT_WINDOW:-0}" = 1 ]; then opens=$(window_next_start); else opens=$(window_next_open); fi
+if [ "${WAIT_FOR_NEXT_WINDOW:-0}" = 1 ]; then opens=$(window_next_start); else opens=$(window_next_open)
+[ "${GO_NOW:-0}" = 1 ] && opens=$(date +%s); fi
 if [ "$opens" -gt "$(date +%s)" ]; then
   wait_min=$(( (opens - $(date +%s)) / 60 ))
   say "waiting for the window to open at $WINDOW_START ($wait_min min)"
   sleep $(( opens - $(date +%s) ))
 fi
 deadline=$(window_deadline)
-say "window open; hard stop at $(TZ=$WINDOW_TZ date -d @"$deadline" '+%F %T'); running $PLAN"
+if [ "${GO_NOW:-0}" = 1 ]; then
+  if [ -n "${MAX_HOURS:-}" ]; then deadline=$(( $(date +%s) + MAX_HOURS * 3600 ))
+  else deadline=$(( $(date +%s) + 365 * 86400 )); fi
+  window_open || say "GO_NOW: running OUTSIDE the maintenance window, by request"
+  say "GO_NOW: started now; hard stop at $(TZ=$WINDOW_TZ date -d @"$deadline" '+%F %T')${MAX_HOURS:+ (MAX_HOURS=$MAX_HOURS)}; running $PLAN"
+else
+  say "window open; hard stop at $(TZ=$WINDOW_TZ date -d @"$deadline" '+%F %T'); running $PLAN"
+fi
 
 setsid bash "$PLAN" >> "$LOG" 2>&1 &
 plan_pid=$!
