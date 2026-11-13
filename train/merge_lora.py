@@ -123,7 +123,9 @@ def main() -> None:
     (out / "MERGE_INFO.json").write_text(json.dumps({
         # No local paths: this file ships with published models. The snapshot
         # directory's name is the HF revision; that's the provenance that matters.
-        "base": args.base, "base_revision": base.name,
+        # A local --base is recorded by its directory name only, never its path.
+        "base": Path(args.base).name if Path(args.base).expanduser().exists() else args.base,
+        "base_revision": base.name,
         "adapter": adapter.name, "adapter_sha256": sha256(adapter / "adapter_model.safetensors"),
         "modules_merged": len(merged), "scale": scale, "formula": "W + scale * B @ A (fp32)",
     }, indent=2))
