@@ -1,8 +1,8 @@
-# Plan: v5, preference training for accuracy (draft, for review)
+# Plan: v5, preference training for accuracy
 
-**Status:** proposal. Nothing is scheduled. Needs Nick's go-ahead, because it
-costs several nights of the maintenance window plus sustained judge load on
-vLLM.
+**Status:** queued (2026-11-13, Nick: "queue those work items to happen after
+v4"). Candidate generation, scoring and the reading pack run from `QUEUE.toml`
+after v4; DPO training waits for the human check of the pairs (HANDOFF §4e).
 
 ## Why
 

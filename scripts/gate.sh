@@ -32,6 +32,9 @@ fi
 step "syntax"
 "$PY" -m compileall -q . -x '\.venv' || fail=1
 
+step "docs (drift check: dead paths, stale counts, plan status, handoff date, learnings format)"
+"$PY" scripts/docs_check.py || fail=1
+
 step "secret scan (staged + branch vs origin/main)"
 scripts/secret-scan.sh --staged || fail=1
 git rev-parse --verify -q origin/main >/dev/null && { scripts/secret-scan.sh --range origin/main..HEAD || fail=1; }

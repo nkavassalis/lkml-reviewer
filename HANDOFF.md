@@ -2,22 +2,27 @@
 
 Read this **and** `AGENTS.md` before touching anything. AGENTS.md is the durable
 design doc; this file is "where the work actually stopped". Results are in
-`docs/REPORT.md`, and the next iteration is planned in `docs/PLAN-v3.md`.
+`docs/REPORT.md`, lessons in `docs/LEARNINGS.md`, and the next iterations in
+`docs/PLAN-v4.md` and `docs/PLAN-v5.md`.
 
 ---
 
-## 0. Status (2026-11-11)
+## 0. Status (2026-11-13)
 
-- The corpus pipeline is built and has run over the whole archive (1996 → Nov 2026).
-- **Two LoRA fine-tunes of `Qwen/Qwen3.8-27B` exist: run-1 and v2.**
-  - v2 is the current model: 1,175 train pairs, 1 epoch, held-out eval loss 2.24 → 2.03.
-  - It learned Linus' *style* (plain text, terse, abuse below his own rate) but not
-    his *substance*: shorter than him, less specific, sometimes confidently wrong.
-  - Greedy decoding loops on 44% of outputs; sampling with a repetition penalty
-    doesn't loop at all.
-- **v3 is in progress (Phase 0, data).** See `docs/PLAN-v3.md`.
-- Adapters and data are **not** in git and not published. Hugging Face upload
-  waits until v3 shows where it lands.
+Rewrite this section whenever the state changes; history goes in
+`docs/LEARNINGS.md` and `docs/REPORT.md`, not here.
+
+- **Published:** v3 (adapter + MLX 8-bit) as `nkavassalis/lkml-reviewer-lora`.
+  Never signs as Linus, beats base 51–24 blind, ties v2. README's journey
+  table has v1–v5 in two lines each.
+- **Running:** v4 (patch-first layout) trains in the 20:00–08:00 ET window from
+  2026-11-13, up to three nights; emails on problems and when done (§4d).
+- **Queued after v4:** fetch, Mac build, multi-sample evaluation, v5 DPO data
+  (candidates, judge scores, reading pack), then a human check; after v5, a
+  greedy-decoding loop check (§4e). Runner: `scripts/queue-runner.sh status`.
+- **On the Mac now:** v3 multi-sample (200 patches × 3, two layouts), ~10 h.
+- **Not built yet:** chain support for `train/dpo_lora.py` (DPO smoke and
+  training items get added at the human gate).
 
 ## 1. What lives where
 
@@ -39,7 +44,7 @@ The rule: **stop the serving container for a training run, and restore it when
 the run ends**. `train/run-chain.sh` does this with an `EXIT` trap, so a crash
 can't leave the service down.
 
-## 2. Measured numbers (beat them, don't re-derive them)
+## 2. Measured numbers (v1/v2 gate; v3 onward in docs/REPORT.md)
 
 | stage | count |
 | --- | --- |
@@ -208,9 +213,14 @@ Not tested against the real cluster: `v5-candidates`' plan and the Mac items.
 
 ## 5. Next actions
 
-Follow `docs/PLAN-v3.md`: Phase 0 (data), then a 2-node data-parallel smoke test,
-then train v3, then evaluate against v2 with blind human ratings. Keep AGENTS.md,
-this file and the report updated in the same commit as any change.
+1. When v4's results email arrives: REPORT section, README journey row,
+   PLAN-v4 status and outcome, LEARNINGS entry (AGENTS.md "Documenting as we
+   go"). The queue carries on by itself.
+2. When the multi-sample report arrives: is v4 better than v3 patch-first
+   beyond the noise floor? That answers whether v4's training bought anything
+   over reordering at inference.
+3. Before the v5 human gate opens: write chain support for `dpo_lora.py` and a
+   DPO smoke test, so approval can go straight to training.
 
 ## 6. Not verified (do not present as done)
 

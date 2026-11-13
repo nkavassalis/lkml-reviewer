@@ -1,8 +1,9 @@
-# Plan: v4 (draft, pending v3's judge results)
+# Plan: v4
 
-**Status:** criteria and candidate levers. The levers get picked once the v3
-blind-judge results are in (v3 vs v2, v3 vs base, Mac vs CUDA). Each row of
-the lever table below names the result that would trigger it.
+**Status:** running (2026-11-13). Lever picked: the patch-first layout (see
+"Update 2026-11-13" below). Trains in the overnight window from 2026-11-13;
+results arrive as `RESULTS-v4.md` and by email. The lever table below is kept
+as it was written before v3's results.
 
 ## What v3 showed so far (100 sampled held-out patches, 2026-11-13)
 

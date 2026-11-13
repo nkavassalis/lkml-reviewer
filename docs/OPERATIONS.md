@@ -31,7 +31,8 @@ then let a script keep to it instead of a person. lkml-reviewer's is 20:00–08:
 Eastern, cluster time.
 
 - **`train/night-run.sh`** waits for the window, runs a plan (a bash script of
-  steps, see `train/night-plan.example.sh`), and at the **hard stop** (window
+  steps, the template's night-plan.example.sh; ours is the cluster-local
+  `data/cluster/night-plan-v4.sh`, gitignored because it holds addresses), and at the **hard stop** (window
   end minus a margin, default 20 min) terminates whatever is still running. The
   chains' EXIT traps restore serving, and the launcher then checks serving is
   up on every node itself, as a safety net. Configure it with environment variables (`WINDOW_START`, `WINDOW_END`, `WINDOW_TZ`, `STOP_MARGIN_MIN`).

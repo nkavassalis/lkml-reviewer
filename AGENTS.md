@@ -56,7 +56,8 @@ linuspr/template.py  the prompt format, shared by export and reviewer; a test fa
                 if train/sft_lora.py's copy drifts
 docs/           OPERATIONS.md (long jobs on shared machines: restore traps,
                 memory caps, resume, watcher + hourly status runs; read it before
-                any long run), REPORT.md (results + learnings), PLAN-v3.md, PLAN-v4.md (draft),
+                any long run), REPORT.md (results + learnings), PLAN-v3/v4/v5.md (each with a **Status:** line),
+                LEARNINGS.md (append-only: what we believed, what we found),
                 CONVERSION.md (adapter -> merged BF16 -> MLX 8-bit; the standard
                 last stage for every model, targeting a 64 GB M4 Pro)
 HANDOFF.md      where the last session actually stopped — read it alongside this file
@@ -105,7 +106,7 @@ cheap. `--delay 0.2` is the floor of politeness on that volunteer mirror.
 ## How to test
 
 ```bash
-.venv/bin/python -m pytest        # 170 hermetic tests, no network, no sleeping
+.venv/bin/python -m pytest        # hermetic: no network, no sleeping (docs_check.py verifies any count we quote)
 .venv/bin/python -m ruff check .
 scripts/gate.sh                   # pytest + lint + compileall + secret scan
 ```
@@ -117,7 +118,9 @@ green before any change is committed.
 
 ## Measured numbers (so a regression is visible)
 
-**Full archive, 1996 → Nov 2026 (1,472 buckets), measured end to end:**
+**Full archive, 1996 → Nov 2026 (1,472 buckets), measured end to end with the
+v1/v2 gate.** v3 loosened the gate (any reply with the real patch): 5,110 train
+/ 766 eval pairs with 2023–2024 held out; see `docs/REPORT.md` §5b.
 
 | stage | count | rate |
 | ----- | ----- | ----- |
@@ -264,6 +267,45 @@ plus a cookie-free GET is enough for this mirror and keeps the pipeline auditabl
 - No secrets, hostnames, paths, or credentials in anything committed; the corpus is
   public mailing-list text but still large — keep it out of git.
 - Only `main` is pushed. `local-history` never leaves this machine.
+
+## Documenting as we go
+
+The point of the project is as much what we learn as the model. Docs drifted
+once (2026-11-13: README calling v2 current after v3 shipped, a stale handoff,
+a plan contradicting the code), so these are rules, and the gate checks the
+mechanical part (`scripts/docs_check.py`).
+
+**Every fact has one home; everything else links to it.**
+
+| fact | home | style |
+| --- | --- | --- |
+| the story, two lines per version | README "The journey so far" | summary, links out |
+| measured results per version | `docs/REPORT.md` | numbers, dated sections |
+| what a version is for, its criteria (set before training), decisions | `docs/PLAN-v<N>.md` | **Status:** line at the top |
+| what we believed, what we found, what changed | `docs/LEARNINGS.md` | append-only, dated |
+| where things stand right now | `HANDOFF.md` §0 | rewritten, never appended |
+| design, invariants, how to run | `AGENTS.md` | durable |
+| running long jobs | `docs/OPERATIONS.md` | procedures |
+| lessons that apply to any project | the template's METHOD.md / OPERATIONS.md | generalised |
+
+**On each event, in the same commit as the change:**
+
+- **A version's results arrive:** REPORT section; README journey row; PLAN
+  status → done, with the outcome against its criteria; a LEARNINGS entry for
+  anything that surprised us; HANDOFF §0; the model card if it's published.
+- **We find we were wrong** (a bug, a misdiagnosis, a number that didn't hold
+  up): a LEARNINGS entry (Believed / Evidence / Changed / Generalizes) next to
+  the fix and its regression test.
+- **A decision is made with Nick:** dated in the PLAN, with his words where it
+  matters; HANDOFF if it changes what runs next.
+- **Code stops matching a doc:** fix the doc in the same commit. Docs describe
+  the code as it is, not as it was planned.
+- **A lesson generalizes:** put it in the template (METHOD.md or
+  OPERATIONS.md) in the same session, and say so under **Generalizes**.
+- **End of a session:** rewrite HANDOFF §0 with today's date.
+
+**Don't quote numbers that change with every commit** (test counts, line
+counts) unless they're dated; `docs_check.py` fails on undated wrong ones.
 
 ## Conventions
 

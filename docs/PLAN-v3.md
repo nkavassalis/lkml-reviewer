@@ -1,5 +1,8 @@
 # Plan: v3
 
+**Status:** done (2026-11-13). Trained and evaluated; results in `docs/REPORT.md` §5b,
+summary in README's journey table. Published as `nkavassalis/lkml-reviewer-lora`.
+
 **Goal:** close the gap v2 exposed. It learned how Linus *sounds*, not what he
 *knows* (shorter than him, names patch identifiers 36–56% of the time vs his
 60%, sometimes confidently wrong). v3 changes the data, not the training code.
