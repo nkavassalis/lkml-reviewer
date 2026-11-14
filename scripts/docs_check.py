@@ -14,6 +14,10 @@ three sessions ago. These checks catch the mechanical part; AGENTS.md
      the newest commit that touched code (handoffs rot first).
   5. docs/LEARNINGS.md entries are "## YYYY-MM-DD: title", in date order,
      each with **Evidence:** and **Changed:** lines (append-only log).
+  6. Every "## Decision: ..." section in a docs/PLAN-*.md says what the next
+     step optimizes (**Optimizes:**) and how the decision measures that
+     (**Measured by:**). A rule that picked v5's starting model without
+     measuring correctness, the thing v5 was for, is why (2026-11-14).
 
     python3 scripts/docs_check.py           # exit 1 on any failure
 """
@@ -154,9 +158,24 @@ def check_learnings() -> list[str]:
     return errs
 
 
+def check_decisions() -> list[str]:
+    errs = []
+    for plan in sorted((ROOT / "docs").glob("PLAN-*.md")):
+        text = plan.read_text()
+        for m in re.finditer(r"^(#{2,3}) Decision:.*$", text, re.M):
+            level = len(m.group(1))
+            nxt = re.compile(rf"^#{{1,{level}}} ", re.M).search(text, m.end())
+            body = text[m.end(): nxt.start() if nxt else len(text)]
+            for field in ("**Optimizes:**", "**Measured by:**"):
+                if field not in body:
+                    errs.append(f"docs/{plan.name}: '{m.group(0).strip()}' has no {field} line "
+                                "(what the next step is for, and how this decision measures it)")
+    return errs
+
+
 def main() -> int:
     docs = tracked_docs()
-    errs = check_paths(docs) + check_test_counts(docs) + check_plans() + check_handoff() + check_learnings()
+    errs = check_paths(docs) + check_test_counts(docs) + check_plans() + check_handoff() + check_learnings() + check_decisions()
     for e in errs:
         print(f"docs: {e}")
     print(f"docs-check: {'FAIL' if errs else 'clean'} ({len(docs)} docs)")

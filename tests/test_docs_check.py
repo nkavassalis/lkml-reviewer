@@ -55,3 +55,15 @@ def test_undated_test_counts_must_match(repo, monkeypatch):
     doc.write_text("pytest  # 41 hermetic tests\nVerified (2026-11-10): 12 hermetic tests\n")
     errs = dc.check_test_counts([doc])
     assert len(errs) == 1 and "says 41" in errs[0]
+
+
+def test_decision_sections_say_what_they_optimize_and_how_they_measure_it(repo):
+    plan = repo / "docs" / "PLAN-v7.md"
+    plan.write_text("# Plan: v7\n\n## Decision: which model v7 starts from\n\nv6 unless worse.\n\n"
+                    "## Costs\n\n**Optimizes:** not in the decision section, doesn't count\n")
+    errs = dc.check_decisions()
+    assert len(errs) == 2 and "Optimizes" in errs[0] and "Measured by" in errs[1]
+    plan.write_text("# Plan: v7\n\n## Decision: which model v7 starts from\n\n"
+                    "**Optimizes:** correctness\n\n### 2026-11-14: dated note\n\n"
+                    "**Measured by:** the blind judge, as decide.py's target\n\n## Costs\n")
+    assert dc.check_decisions() == []

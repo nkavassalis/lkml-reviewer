@@ -21,13 +21,25 @@ args=(--primary-marker '--- The patch ---' --context-marker '--- Earlier in this
     python3 "$QROOT/train/paired_stats.py" "$d/$1" "$d/$2" "${args[@]}"
   done
 } > "$d/MULTISAMPLE.md" || exit 1
-# Which model v5 starts from (PLAN-v5; rule set before the data, in choose_base.py).
+# Decision: which model v5 starts from (PLAN-v5; rule set before the data, in choose_base.py).
 # v3 patch-first and v4 saw byte-identical inputs (data/v4/sft_eval.jsonl).
 python3 "$QROOT/train/paired_stats.py" "$d/ms-v3-patchfirst.jsonl:v3_pf" "$d/ms-v4.jsonl:v4" "${args[@]}" \
   --json "$d/v3pf-vs-v4.json" > /dev/null || exit 1
 mkdir -p "$QROOT/data/v5"
 python3 "$QROOT/scripts/q/choose_base.py" "$d/v3pf-vs-v4.json" > "$d/v5-base.txt" || exit 1
 base=$(head -1 "$d/v5-base.txt"); echo "$base" > "$QROOT/data/v5/BASE"
-{ echo "## v5 starts from: $base"; echo; tail -n +2 "$d/v5-base.txt" | sed 's/^/- /'; echo; cat "$d/MULTISAMPLE.md"; } > "$d/MULTISAMPLE.email.md"
-"$QROOT/scripts/notify.sh" "[lkml-reviewer] Multi-sample evaluation: v3 vs v4; v5 starts from $base" < "$d/MULTISAMPLE.email.md"
+# Does the rest of the evidence agree? (train/decide.py; 2026-11-14.) The blind
+# judge is the only correctness signal, and v5 is for correctness: --target.
+scp -q "$MASTER:$W/run-4/judge-v4-vs-v3.jsonl" "$d/judge-v4-vs-v3.jsonl" 2>/dev/null || true
+python3 "$QROOT/train/decide.py" --rule "$base" \
+  --paired "$d/v3pf-vs-v4.json:grounded in primary:higher" --paired "$d/v3pf-vs-v4.json:loops:lower" \
+  --judge "$d/judge-v4-vs-v3.jsonl:v3:v4" --target judge --alias v3_pf=v3 > "$d/v5-evidence.txt"
+agree=$?
+verdict=$([ $agree -eq 0 ] && echo "the evidence agrees" || echo "the evidence DISAGREES: a person decides")
+{ echo "## v5 starts from: $base (by the rule; $verdict)"; echo; tail -n +2 "$d/v5-base.txt" | sed 's/^/- /'; echo
+  echo "### Evidence check (train/decide.py)"; echo; sed 's/^/- /' "$d/v5-evidence.txt"; echo
+  echo "The queue waits at v5-base-decision either way (PLAN-v5, 2026-11-14): set data/v5/BASE, then"
+  echo "python3 train/workqueue.py approve v5-base-decision"; echo
+  cat "$d/MULTISAMPLE.md"; } > "$d/MULTISAMPLE.email.md"
+"$QROOT/scripts/notify.sh" "[lkml-reviewer] Multi-sample evaluation: v3 vs v4; rule picks $base, $verdict" < "$d/MULTISAMPLE.email.md"
 cat "$d/MULTISAMPLE.md"

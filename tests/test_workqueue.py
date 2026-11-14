@@ -163,3 +163,26 @@ window = true
     (state / "open-until").write_text("2026-11-14 15:00 EST\n")
     once()
     assert "left=180" in log.read_text()
+
+
+def test_exit_76_raises_a_gate_that_approve_closes_without_rerunning(tmp_path):
+    env = setup(tmp_path, f'''
+[[item]]
+id = "decide"
+title = "decide"
+run = "echo ran >> {tmp_path}/runs.txt; exit 76"
+
+[[item]]
+id = "next"
+title = "next"
+run = "echo next"
+after = ["decide"]
+''')
+    assert nxt(env).strip() == "RUN decide"
+    wq(env, "run", "decide")
+    assert json.loads((tmp_path / "state.json").read_text())["decide"]["status"] == "needs-person"
+    assert nxt(env).strip() == ""                       # its dependents wait; nothing re-runs it
+    wq(env, "approve", "decide")
+    assert json.loads((tmp_path / "state.json").read_text())["decide"]["status"] == "done"
+    assert nxt(env).strip() == "RUN next"
+    assert (tmp_path / "runs.txt").read_text().count("ran") == 1

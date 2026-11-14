@@ -1,5 +1,5 @@
 """Pick v5's starting model from the multi-sample comparison (docs/PLAN-v5.md,
-"Which model v5 starts from"). The rule was written before the data existed:
+"Decision: which model v5 starts from"). The rule was written before the data existed:
 
     v4, unless v4 is clearly worse than v3 given the same patch-first input:
     its patch grounding is lower with the whole 95% CI below zero, or it

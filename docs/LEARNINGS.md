@@ -254,5 +254,11 @@ measures correctness, and v5 is preference training *for correctness*. Nick
 asked why we'd build on v4; the rule would have picked it without looking.
 **Changed:** a human gate (`v5-base-decision`) before candidate generation;
 PLAN-v5 dated note. `choose_base.py` unchanged (its output is one input).
-**Generalizes:** yes: template METHOD.md item 5: a pre-set rule must include
-the metric the next step optimizes, or it gets a human gate.
+Then, to catch it without a person noticing: `train/decide.py` (exit 76 when
+the evidence disagrees; a `--target` signal that leans the other way at all,
+since 45–28 is p = 0.06 and a significance test alone passes it), run by
+`multisample-report`; queue exit 76 = a gate the step raises itself;
+`docs_check.py` requires **Optimizes:**/**Measured by:** in PLAN `## Decision:`
+sections; AGENTS.md "Automatic decisions".
+**Generalizes:** yes: template METHOD.md item 5, `decide.py`, the queue's exit
+76, the docs check, PLAN-template's Decision section, AGENTS.md.

@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Run the improvement queue (QUEUE.toml) forever, one item at a time, on the
 # monitoring box. Emails (scripts/notify.sh): Started, Done, FAILED (the queue
-# then halts until `workqueue.py reset|skip`), and "Needs you" at a human gate.
+# then halts until `workqueue.py reset|skip`), and "Needs you" at a human gate
+# or when a step exits 76 (it raised its own gate; `approve` marks it done).
 #
 #   scripts/queue-runner.sh start | stop | status | once
 #
@@ -51,6 +52,10 @@ once() {
   WINDOW_MINUTES_LEFT=$left wq run "$id"; rc=$?
   if [ $rc -eq 0 ]; then
     { echo "Done: $(title "$id")"; echo; tail -20 "${QUEUE_LOGS:-$root/data/queue/logs}/$id.log"; echo; wq status; } | notify "Done: $(title "$id")"
+  elif [ $rc -eq 76 ]; then
+    { echo "Needs a person to decide: $(title "$id"). The step stopped itself:"; echo
+      tail -30 "${QUEUE_LOGS:-$root/data/queue/logs}/$id.log"; echo
+      echo "When it's decided:  python3 train/workqueue.py approve $id"; echo; wq status; } | notify "Needs you: $(title "$id")"
   elif [ $rc -eq 75 ]; then
     { echo "Paused at the window's end, resumes in the next window: $(title "$id")"; echo;
       tail -15 "${QUEUE_LOGS:-$root/data/queue/logs}/$id.log"; } | notify "Paused (resumes next window): $(title "$id")"

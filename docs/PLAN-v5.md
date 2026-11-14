@@ -36,7 +36,16 @@ patch, one judged closer to the truth, and push it toward that one.
 DPO, not PPO/RL: no reward model to train, no online rollouts; a single
 offline pass over preference pairs. That suits nights on two GB10s.
 
-## Which model v5 starts from (rule set 2026-11-13, before the data)
+## Decision: which model v5 starts from (rule set 2026-11-13, before the data)
+
+**Optimizes:** v5 (preference training) is for correctness: fewer false claims
+about the patch.
+**Measured by:** as first written, nothing in the rule did (it watched patch
+grounding and looping). Since 2026-11-14 the blind judge is the target signal
+in `train/decide.py`, which stops at a person if it leans the other way.
+**Pre-mortem (added 2026-11-14, after the judge result, so not blind):** the
+rule's choice is wrong if v4 makes more false claims than v3 (judge, reasons),
+if v4's grounding gain is inside the noise floor, or if v4 loops more.
 
 v5 starts from **v4 by default**. It starts from **v3 with patch-first input**
 instead only if the multi-sample comparison (200 held-out patches × 3

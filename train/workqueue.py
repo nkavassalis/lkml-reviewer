@@ -14,7 +14,7 @@ Items live in QUEUE.toml (edit it to add, reorder or remove work):
     gate = "auto"                  # "auto", or "human": waits for `approve` (emails "Needs you")
 
 State (gitignored) records each item: pending, running, done, failed,
-waiting-human, approved, skipped. A failed item halts the queue until someone
+waiting-human, approved, needs-person, skipped. A failed item halts the queue until someone
 looks (`reset` or `skip`): unattended retries of a broken step waste nights.
 
 Exit code 75 (EX_TEMPFAIL) means "not finished, resume later": a step longer
@@ -22,6 +22,12 @@ than one window (e.g. generating thousands of candidates) stops at the hard
 stop, exits 75, and runs again in the next window, picking up where it left
 off. It goes back to pending (keeping its count of passes); it doesn't halt
 the queue.
+
+Exit code 76 means "a person must decide": a gate the step raises itself, e.g.
+a decision script that finds the evidence disagreeing (train/decide.py). The
+item becomes needs-person, its dependents wait, the runner emails "Needs you"
+with the step's log, and `approve ID` marks it done without re-running it
+(the person has made the call, e.g. by editing the file the step wrote).
 
     python3 train/workqueue.py status
     python3 train/workqueue.py next --window-open 1 --minutes-left 600   # id or nothing
@@ -88,7 +94,7 @@ def next_item(items, state, *, window_open: bool, minutes_left: int) -> tuple[st
     waiting = []
     for item in items:
         st = status_of(state, item["id"])
-        if st in ("done", "skipped"):
+        if st in ("done", "skipped", "needs-person"):
             continue
         if any(status_of(state, a) not in ("done", "skipped") for a in item.get("after", [])):
             continue
@@ -105,6 +111,7 @@ def next_item(items, state, *, window_open: bool, minutes_left: int) -> tuple[st
 
 
 RESUME_LATER = 75  # EX_TEMPFAIL
+NEEDS_PERSON = 76  # the step raised its own human gate
 
 
 def run(item: dict, state: dict) -> int:
@@ -121,7 +128,7 @@ def run(item: dict, state: dict) -> int:
                             stderr=subprocess.STDOUT).returncode
         fh.write(f"=== {time.strftime('%F %T')} exit {rc}\n")
     passes += 1
-    status = "done" if rc == 0 else "pending" if rc == RESUME_LATER else "failed"
+    status = {0: "done", RESUME_LATER: "pending", NEEDS_PERSON: "needs-person"}.get(rc, "failed")
     state[item["id"]].update(status=status, rc=rc, passes=passes, ended=time.strftime("%F %T"))
     save_state(state)
     return rc
@@ -162,6 +169,8 @@ def main() -> int:
     if args.cmd == "run":
         return run(by_id[args.id], state)
     new = {"approve": "approved", "reset": "pending", "skip": "skipped", "waiting": "waiting-human"}[args.cmd]
+    if args.cmd == "approve" and state.get(args.id, {}).get("status") == "needs-person":
+        new = "done"          # the person decided; the step's own run already happened
     state.setdefault(args.id, {})["status"] = new
     save_state(state)
     print(f"{args.id}: {new}")

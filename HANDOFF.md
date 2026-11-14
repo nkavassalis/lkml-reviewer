@@ -210,7 +210,7 @@ patch-first`). v3's as-trained data: `data/train/run-3b/`.
    first: the cluster's copy predated `--samples`): 800 training patches
    (seeded, `data/v5/in/`), 4 samples each from v5's starting model
    (`data/v5/BASE`: v4 unless the report shows v4 clearly worse than v3
-   patch-first; PLAN-v5 "Which model v5 starts from"), two chunks of 100 per round (one per node), via a GO_NOW
+   patch-first; PLAN-v5 "Decision: which model v5 starts from"), two chunks of 100 per round (one per node), via a GO_NOW
    `night-run.sh` with `night-plan-cands.sh` (cluster-local copy in
    `data/cluster/`). ~4.5 h per round, two rounds a night: ~2 nights. Exits 75
    between windows ("Paused" email).

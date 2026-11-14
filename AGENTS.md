@@ -290,6 +290,8 @@ mechanical part (`scripts/docs_check.py`).
 
 **On each event, in the same commit as the change:**
 
+- **Any result arrives:** check every queued decision it bears on
+  ("Automatic decisions", 5) before reporting it.
 - **A version's results arrive:** REPORT section; README journey row; PLAN
   status → done, with the outcome against its criteria; a LEARNINGS entry for
   anything that surprised us; HANDOFF §0; the model card if it's published.
@@ -306,6 +308,33 @@ mechanical part (`scripts/docs_check.py`).
 
 **Don't quote numbers that change with every commit** (test counts, line
 counts) unless they're dated; `docs_check.py` fails on undated wrong ones.
+
+## Automatic decisions
+
+Some steps choose for us: which model the next version starts from, whether a
+result clears a bar. On 2026-11-14 a rule set beforehand would have started
+v5 from v4 automatically while the blind judge, the only correctness signal,
+preferred v3; v5 exists to improve correctness. Nick caught it, not the
+tooling. So:
+
+1. **Write a `## Decision:` section in the PLAN before the data**, with
+   **Optimizes:** (what the step after the decision is for) and **Measured
+   by:** (which signal in the rule measures that). `docs_check.py` requires
+   both lines. A blank "Measured by" is the warning.
+2. **Pre-mortem:** in the same section, the results that would make the rule's
+   choice wrong. Then look for them when the results come in.
+3. **Automate only when the evidence agrees.** After the rule picks,
+   `train/decide.py` checks the choice against every result available and
+   exits 76 (the queue stops and emails "Needs you") on a significant
+   conflict, or if a `--target` signal (the metric the next step is for)
+   leans the other way at all or is missing. A significance test alone
+   would have let the 45–28 judge result through (p = 0.06).
+4. **A person at every fork that commits nights of compute.** Mechanical steps
+   run unattended; branches that are expensive to undo get a human gate.
+5. **When any result arrives, check what's queued behind it.** For each
+   pending decision in `QUEUE.toml` and each PLAN Decision section: does this
+   change it? Every status report says what a new result means for queued
+   decisions, not only what the number is.
 
 ## Conventions
 
