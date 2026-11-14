@@ -11,7 +11,6 @@ from __future__ import annotations
 import json
 import re
 import statistics
-import sys
 
 from linuspr.moderate import classify
 
@@ -53,9 +52,32 @@ def metrics(rows: list[dict], key: str) -> dict[str, float]:
     }
 
 
-def main(path: str) -> None:
+def read_rows(path: str) -> list[dict]:
     with open(path) as f:
-        rows = [json.loads(line) for line in f]
+        return [json.loads(line) for line in f if line.strip()]
+
+
+def targets_column(path: str) -> dict[str, float]:
+    """The same metrics on the TRAINING targets: the rate the data teaches.
+    A model rarely does something more often than its targets do, so this is
+    the ceiling to read every model column against."""
+    return metrics(read_rows(path), "output")
+
+
+def main(argv: list[str] | None = None) -> None:
+    import argparse
+    ap = argparse.ArgumentParser(description="proxy metrics per arm; the training targets' rate alongside")
+    ap.add_argument("compare", nargs="?", help="compare.py output (held-out rows, one column per arm)")
+    ap.add_argument("--train", help="training file: adds a 'training targets' column (the data's rate)")
+    ap.add_argument("--targets", help="training file alone: the metrics on its targets, nothing else")
+    args = ap.parse_args(argv)
+    if args.targets:
+        col = targets_column(args.targets)
+        print(f"training targets, n = {len(read_rows(args.targets))}\n\n| metric | training targets |\n|---|---|")
+        for m, v in col.items():
+            print(f"| {m} | {v:.0f} |" if m.startswith("median") else f"| {m} | {v:.0%} |")
+        return
+    rows = read_rows(args.compare)
     names = {"reference": "Linus (reference)", "base": "base, greedy",
              "tuned": "fine-tuned, greedy", "base_sampled": "base, sampled",
              "tuned_sampled": "fine-tuned, sampled"}
@@ -65,6 +87,10 @@ def main(path: str) -> None:
         names[k] = k.replace("_sampled", ", sampled")
     keys = [k for k in names if k in rows[0]]
     cols = {k: metrics(rows, k) for k in keys}
+    if args.train:   # the data's rate, next to Linus' and the models'
+        names["training targets"] = "training targets"
+        keys.insert(1, "training targets")
+        cols["training targets"] = targets_column(args.train)
     print(f"n = {len(rows)} held-out pairs\n")
     print("| metric | " + " | ".join(names[k] for k in keys) + " |")
     print("|---" * (len(keys) + 1) + "|")
@@ -77,4 +103,4 @@ def main(path: str) -> None:
 
 
 if __name__ == "__main__":
-    main(sys.argv[1])
+    main()

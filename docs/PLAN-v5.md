@@ -99,6 +99,10 @@ reply names something from the patch (`data/rev/sft.jsonl`, same grounding
 metric as the evaluation; median reply 969 chars vs 619). Same held-out file
 and the same 100 patches as v3/v4. Confound: a third of the updates.
 
+**Data rate:** names something from the patch: 33% of v4's 5,165 training
+targets (`paired_stats` test; 39% by `train/score.py --targets`), 100% of the
+review-only set by construction; held-out references 37%. Median target length
+619 chars (review-only 969), held-out 906.
 **Optimizes:** what v5 is for: correct, substantive reviews of the patch.
 **Measured by:** v5's rubric (`train/rubric.py`, `make_preferences.ask`) on the
 100 held-out patches, paired against v3 (2.03) and v4 (1.86), as

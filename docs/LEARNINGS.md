@@ -294,3 +294,20 @@ on the 1,718 replies that engage the patch.
 **Generalizes:** yes: template METHOD.md: measure what fraction of the
 training targets do the task you want before blaming the model, and never
 build a version on a single-sample probe.
+
+## 2026-11-14: We measured the models, never the data
+
+**Believed:** the metrics we tracked (names the patch, length, loops) were
+model diagnostics, and Linus' rate on held-out patches was the bar to clear.
+**Evidence:** the same metric on the training targets, never run until
+today, was 33%; the models were at 25%. v3 had loosened the data gate (any
+reply with the real patch, 4.4x the data) without re-measuring what the new
+pairs were about, and v4's target ("name the patch >= 20%, Linus 24%") treated
+the data's ceiling as a benchmark. Nick: "How did we miss this?"
+**Changed:** `train/score.py --targets` and `--train` (the training targets'
+column in every results table; the review-only report uses it); `docs_check.py`
+requires a **Data rate:** line in every active plan; AGENTS.md events "the data
+selection changes" and "a model falls short on a metric".
+**Generalizes:** yes: the same in the template (score.py, docs_check,
+PLAN-template, AGENTS.md, METHOD.md section 4 "Diagnose the data before the
+model").

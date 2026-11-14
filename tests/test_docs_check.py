@@ -67,3 +67,13 @@ def test_decision_sections_say_what_they_optimize_and_how_they_measure_it(repo):
                     "**Optimizes:** correctness\n\n### 2026-11-14: dated note\n\n"
                     "**Measured by:** the blind judge, as decide.py's target\n\n## Costs\n")
     assert dc.check_decisions() == []
+
+
+def test_active_plans_need_the_datas_rate_on_their_targets(repo):
+    plan = repo / "docs" / "PLAN-v7.md"
+    plan.write_text("# Plan: v7\n\n**Status:** queued (2026-11-14)\n\n**Targets:** name the patch >= 40%\n")
+    assert any("Data rate" in e for e in dc.check_data_rates())
+    plan.write_text(plan.read_text() + "**Data rate:** 33% of training targets name the patch\n")
+    assert dc.check_data_rates() == []
+    plan.write_text("# Plan: v6\n\n**Status:** done (2026-11-14)\n\n**Targets:** x\n")
+    assert dc.check_data_rates() == []                    # history isn't rewritten

@@ -24,7 +24,8 @@ for other in v3 v4; do
   python3 "$QROOT/train/rubric.py" paired "$d/compare-all.jsonl" "$d/rubric.jsonl" \
     --a "${other}_sampled:$other" --b rev_sampled:rev --json "$d/rubric-$other-vs-rev.json" || exit 1
 done > "$d/RUBRIC.md"
-PYTHONPATH="$QROOT" python3 "$QROOT/train/score.py" "$d/compare-all.jsonl" > "$d/PROXIES.md" || exit 1
+# --train: the review-only data's own rates, next to the models' (AGENTS.md)
+PYTHONPATH="$QROOT" python3 "$QROOT/train/score.py" "$d/compare-all.jsonl" --train "$d/sft.jsonl" > "$d/PROXIES.md" || exit 1
 python3 - "$d" > "$d/VERDICT.md" <<'PY' || exit 1
 import json, sys, re
 d = sys.argv[1]

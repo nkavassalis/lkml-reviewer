@@ -18,6 +18,10 @@ three sessions ago. These checks catch the mechanical part; AGENTS.md
      step optimizes (**Optimizes:**) and how the decision measures that
      (**Measured by:**). A rule that picked v5's starting model without
      measuring correctness, the thing v5 was for, is why (2026-11-14).
+  7. Every active plan (draft, proposal, queued, running) has a **Data rate:**
+     line: each target metric measured on the training targets themselves
+     (`train/score.py --targets`). Two versions chased "name the patch more"
+     while only a third of the training replies did (2026-11-14).
 
     python3 scripts/docs_check.py           # exit 1 on any failure
 """
@@ -173,9 +177,23 @@ def check_decisions() -> list[str]:
     return errs
 
 
+ACTIVE = ("draft", "proposal", "queued", "running")
+
+
+def check_data_rates() -> list[str]:
+    errs = []
+    for plan in sorted((ROOT / "docs").glob("PLAN-*.md")):
+        text = plan.read_text()
+        m = re.search(r"\*\*Status:\*\*\s*([a-z]+)", "\n".join(text.splitlines()[:15]), re.I)
+        if m and m.group(1).lower() in ACTIVE and "**Data rate:**" not in text:
+            errs.append(f"docs/{plan.name}: an active plan needs a **Data rate:** line (each target "
+                        "metric on the training targets: train/score.py --targets)")
+    return errs
+
+
 def main() -> int:
     docs = tracked_docs()
-    errs = check_paths(docs) + check_test_counts(docs) + check_plans() + check_handoff() + check_learnings() + check_decisions()
+    errs = check_paths(docs) + check_test_counts(docs) + check_plans() + check_handoff() + check_learnings() + check_decisions() + check_data_rates()
     for e in errs:
         print(f"docs: {e}")
     print(f"docs-check: {'FAIL' if errs else 'clean'} ({len(docs)} docs)")

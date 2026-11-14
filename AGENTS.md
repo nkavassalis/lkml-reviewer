@@ -290,6 +290,13 @@ mechanical part (`scripts/docs_check.py`).
 
 **On each event, in the same commit as the change:**
 
+- **The data selection changes** (a gate loosened, a filter added, new
+  sources): run `train/score.py --targets` on the new training file and put
+  each target metric's rate in the PLAN's **Data rate:** line, in the same
+  commit. (lkml-reviewer's v3 loosened its gate; two-thirds of the new pairs
+  weren't code review, and nobody measured it for two versions.)
+- **A model falls short on a metric:** measure it on the training targets
+  first. If the data scores the same, change the data, not the training.
 - **Any result arrives:** check every queued decision it bears on
   ("Automatic decisions", 5) before reporting it.
 - **A version's results arrive:** REPORT section; README journey row; PLAN
