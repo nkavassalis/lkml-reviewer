@@ -25,8 +25,9 @@ Rewrite this section whenever the state changes; history goes in
   model. The build first failed on disk space (`docs/LEARNINGS.md`); the Mac
   is now a dedicated test bed with ~248 GB free.
 - **v5's starting model needs Nick:** the judge preferred v3 over v4 45–28
-  (v4 makes more false claims about the patch). The queue stops at the human
-  gate `v5-base-decision` after the multi-sample report; set `data/v5/BASE`
+  (v4 makes more false claims about the patch). v5's own rubric scores both
+  (`rubric-score`) and is the evidence check's target; the report email has
+  all of it. The queue then stops at the human gate `v5-base-decision`; set `data/v5/BASE`
   (v3 or v4), then `python3 train/workqueue.py approve v5-base-decision`.
   PLAN-v5, "2026-11-14: a person confirms the starting model".
 - **Cluster outside the window until 2026-11-15 07:40 ET:**
@@ -214,6 +215,10 @@ patch-first`). v3's as-trained data: `data/train/run-3b/`.
    `night-run.sh` with `night-plan-cands.sh` (cluster-local copy in
    `data/cluster/`). ~4.5 h per round, two rounds a night: ~2 nights. Exits 75
    between windows ("Paused" email).
+4b. `rubric-score` (after `v4-fetch`, ~40 min, vLLM serving, no downtime):
+   v5's own rubric (`train/rubric.py` → `make_preferences.ask`) scores v3, v4
+   and base on the 100 held-out patches → `data/train/run-4/RUBRIC.md` and
+   `rubric-*.json`; the v3-vs-v4 score is the target of the evidence check.
 5. `multisample-report`: when the Mac is idle: `paired_stats.py` v3-tf / v3-pf / v4
    with noise floors → `data/train/multisample/MULTISAMPLE.md`, emailed, plus
    the v5 starting-model decision (`scripts/q/choose_base.py` → `data/v5/BASE`).

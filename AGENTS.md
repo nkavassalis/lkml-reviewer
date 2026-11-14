@@ -329,6 +329,11 @@ tooling. So:
    conflict, or if a `--target` signal (the metric the next step is for)
    leans the other way at all or is missing. A significance test alone
    would have let the 45–28 judge result through (p = 0.06).
+   **The target is the next step's own scoring function**, applied to the
+   candidates (`train/rubric.py`): for preference training, the rubric that
+   will score its pairs. A different judge measures a different question
+   (a pairwise judge without "saying little is not a virtue" rewards
+   caution).
 4. **A person at every fork that commits nights of compute.** Mechanical steps
    run unattended; branches that are expensive to undo get a human gate.
 5. **When any result arrives, check what's queued behind it.** For each

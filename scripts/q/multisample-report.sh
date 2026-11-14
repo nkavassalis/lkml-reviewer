@@ -28,16 +28,20 @@ python3 "$QROOT/train/paired_stats.py" "$d/ms-v3-patchfirst.jsonl:v3_pf" "$d/ms-
 mkdir -p "$QROOT/data/v5"
 python3 "$QROOT/scripts/q/choose_base.py" "$d/v3pf-vs-v4.json" > "$d/v5-base.txt" || exit 1
 base=$(head -1 "$d/v5-base.txt"); echo "$base" > "$QROOT/data/v5/BASE"
-# Does the rest of the evidence agree? (train/decide.py; 2026-11-14.) The blind
-# judge is the only correctness signal, and v5 is for correctness: --target.
+# Does the rest of the evidence agree? (train/decide.py; 2026-11-14.) v5 is for
+# correctness, scored by its own rubric (rubric-score): that is the --target.
+# The pairwise judge and the proxies block only on a significant conflict.
+r4="$QROOT/data/train/run-4"
 scp -q "$MASTER:$W/run-4/judge-v4-vs-v3.jsonl" "$d/judge-v4-vs-v3.jsonl" 2>/dev/null || true
 python3 "$QROOT/train/decide.py" --rule "$base" \
+  --paired "$r4/rubric-v3-vs-v4.json:rubric score:higher" --paired "$r4/rubric-v3-vs-v4.json:false claims:lower" \
   --paired "$d/v3pf-vs-v4.json:grounded in primary:higher" --paired "$d/v3pf-vs-v4.json:loops:lower" \
-  --judge "$d/judge-v4-vs-v3.jsonl:v3:v4" --target judge --alias v3_pf=v3 > "$d/v5-evidence.txt"
+  --judge "$d/judge-v4-vs-v3.jsonl:v3:v4" --target "rubric score" --alias v3_pf=v3 > "$d/v5-evidence.txt"
 agree=$?
 verdict=$([ $agree -eq 0 ] && echo "the evidence agrees" || echo "the evidence DISAGREES: a person decides")
 { echo "## v5 starts from: $base (by the rule; $verdict)"; echo; tail -n +2 "$d/v5-base.txt" | sed 's/^/- /'; echo
   echo "### Evidence check (train/decide.py)"; echo; sed 's/^/- /' "$d/v5-evidence.txt"; echo
+  echo "### v5's rubric on the 100 held-out patches"; echo; cat "$r4/RUBRIC.md" 2>/dev/null; echo
   echo "The queue waits at v5-base-decision either way (PLAN-v5, 2026-11-14): set data/v5/BASE, then"
   echo "python3 train/workqueue.py approve v5-base-decision"; echo
   cat "$d/MULTISAMPLE.md"; } > "$d/MULTISAMPLE.email.md"

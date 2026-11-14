@@ -34,11 +34,19 @@ after = ["v4-mac-convert"]
 when = "scripts/q/ready.sh mac"
 
 [[item]]
+id = "rubric-score"
+title = "Score v3, v4 and base on the held-out patches with v5's own rubric (target signal)"
+run = "scripts/q/rubric-score.sh"
+est_min = 40
+after = ["v4-fetch"]
+when = "scripts/q/ready.sh cluster"   # needs vLLM serving: no chain running
+
+[[item]]
 id = "multisample-report"
 title = "Multi-sample report: v3 vs v4 with noise floors"
 run = "scripts/q/multisample-report.sh"
 est_min = 5
-after = ["v4-multisample"]
+after = ["v4-multisample", "rubric-score"]   # the rubric is decide.py's target signal
 when = "scripts/q/ready.sh mac"
 
 [[item]]

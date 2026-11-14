@@ -41,8 +41,12 @@ offline pass over preference pairs. That suits nights on two GB10s.
 **Optimizes:** v5 (preference training) is for correctness: fewer false claims
 about the patch.
 **Measured by:** as first written, nothing in the rule did (it watched patch
-grounding and looping). Since 2026-11-14 the blind judge is the target signal
-in `train/decide.py`, which stops at a person if it leans the other way.
+grounding and looping). Since 2026-11-14, v5's own rubric (`train/rubric.py`
+reusing `make_preferences.ask`) scores v3, v4 and base on the 100 held-out
+patches (queue item `rubric-score`), and that score is `train/decide.py`'s
+target: if it leans away from the rule's choice, a person decides. The
+pairwise judge is a non-target signal: it has no "saying little is not a
+virtue" clause, so it rewards caution that v5's scoring won't.
 **Pre-mortem (added 2026-11-14, after the judge result, so not blind):** the
 rule's choice is wrong if v4 makes more false claims than v3 (judge, reasons),
 if v4's grounding gain is inside the noise floor, or if v4 loops more.

@@ -262,3 +262,19 @@ since 45–28 is p = 0.06 and a significance test alone passes it), run by
 sections; AGENTS.md "Automatic decisions".
 **Generalizes:** yes: template METHOD.md item 5, `decide.py`, the queue's exit
 76, the docs check, PLAN-template's Decision section, AGENTS.md.
+
+## 2026-11-14: Two judges, two different questions
+
+**Believed:** the pairwise judge (`judge.py`) and v5's preference rubric
+(`make_preferences.py`) measure the same thing: review quality, accuracy first.
+**Evidence:** both rank accuracy first, but only the rubric says "saying little
+is not a virtue". The pairwise judge's v4-vs-v3 reasons are often "A makes no
+false claims, whereas B…": a cautious, vague review beats a specific one with
+a slip. That's the v2 effect, and v5's scoring deliberately won't reward it.
+**Changed:** `train/rubric.py` scores models with the next step's own scorer
+(`make_preferences.ask`); queue item `rubric-score`; its v3-vs-v4 score is
+the `--target` of v5's starting-model check; the judge is a non-target
+signal. Tests in `tests/test_rubric.py`.
+**Generalizes:** yes: template `rubric.py`, METHOD.md and AGENTS.md: measure a
+decision with the scoring function the next step will optimize, not a proxy
+with a different rubric.
