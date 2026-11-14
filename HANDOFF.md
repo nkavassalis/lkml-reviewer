@@ -20,11 +20,10 @@ Rewrite this section whenever the state changes; history goes in
   from 08:00 ET (hard stop 16:00; ~6 h); the multi-night v4 loop was stopped.
   `RESULTS-v4.md` then triggers the FINISHED email and the queue. Training had
   finished 06:49 (eval loss 2.121 → 1.885).
-- **Mac: blocked, needs Nick.** `v4-mac-convert` FAILED (queue halted): 63 GB
-  free, needs ~88. 29.5 GB sit in unreferenced shared HF blobs (`docs/LEARNINGS.md`).
-  On the Mac: `~/lkml-mac/.venv/bin/hf cache prune`, then here:
-  `python3 train/workqueue.py reset v4-mac-convert`. The queue then builds v4
-  and starts v4 × 200 × 3 (~5 h) from the adapter (`v4-adapter-fetch`, done).
+- **Mac:** v4 MLX build done 08:28 (8.7 tok/s, 28.9 GB peak); v4 × 200 × 3
+  multi-sample running (~5 h), then `multisample-report` picks v5's starting
+  model. The build first failed on disk space (`docs/LEARNINGS.md`); the Mac
+  is now a dedicated test bed with ~248 GB free.
 - **Cluster outside the window until 2026-11-15 07:40 ET:**
   `data/queue/runner/open-until` lets window items run today (§4e). Next on
   the cluster: `dpo-smoke`, then `v5-candidates`. Delete the file to stop that.
