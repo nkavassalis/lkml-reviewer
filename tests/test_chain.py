@@ -19,7 +19,7 @@ def run_chain(tmp: Path, **env) -> tuple[int, list[str], str]:
     work = tmp / "work"
     work.mkdir(exist_ok=True)
     e = {**os.environ, "PATH": f"{bin_}:{os.environ['PATH']}", "WORK": str(work), "RUN": "run-5",
-         "PEER": "peer", "MASTER_ADDR": "10.0.0.1", "IFACE": "eth9", **env}
+         "PEER": "peer", "MASTER_ADDR": "192.0.2.1", "IFACE": "eth9", **env}
     p = subprocess.run(["bash", str(CHAIN)], env=e, capture_output=True, text=True)
     log = (work / "chain-run-5.log").read_text() if (work / "chain-run-5.log").exists() else ""
     return p.returncode, calls.read_text().splitlines() if calls.exists() else [], log

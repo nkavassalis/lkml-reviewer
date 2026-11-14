@@ -230,3 +230,16 @@ DPO run.
 **Generalizes:** yes: template chain copies checkpoints to the peer (test
 added); OPERATIONS.md says to deploy in the step and checksum the nodes, and
 to test a resume on purpose.
+
+## 2026-11-14: Deleting a cached model freed nothing
+
+**Believed:** `rm -rf ~/.cache/huggingface/hub/models--<model>` frees that
+model's disk space (the v4 Mac step did this to make room).
+**Evidence:** free space stayed at 63 GB and the v4 build failed (needs ~88).
+This `huggingface_hub` (2.4) keeps file data in a shared, deduplicated store
+(`hub/blobs`); model folders hold small pointers. `hf cache ls` then reported
+"6 unreferenced shared blob(s) totalling 29.5G".
+**Changed:** `scripts/q/v4-mac-convert.sh` uses `hf cache rm` + `hf cache
+prune` and re-checks free space before converting; CONVERSION.md.
+**Generalizes:** yes: template CONVERSION.md. Free cache space with the
+cache's own tool, and re-measure after.

@@ -120,6 +120,14 @@ installed with `scripts/install-reviewer.sh` (pipx, `[mlx]` extra):
 
 The 8-bit 27B fits with ~26 GB of the wired limit to spare.
 
+**Disk: the conversion peaks at ~88 GB** (merged BF16 ~55 GB plus the MLX
+output ~27 GB) on top of the BF16 base in the HF cache. To make room, remove
+cached models with `hf cache rm <repo>` and then `hf cache prune`, never `rm -rf`
+on a `models--*` folder: recent `huggingface_hub` versions keep file data in a
+shared blob store (`hub/blobs`, marked `.huggingface-shared-blobs`), so deleting
+a model's folder frees nothing and leaves its data orphaned (lkml-reviewer,
+2026-11-14: 29.5 GB stranded, the v4 build failed on space).
+
 **2026-11-12, v2 adapter through the full pipeline** (`scripts/convert-mlx.sh
 --adapter v2-adapter --bits 8`, on the Mac itself, from the BF16 base in the
 HF cache):
