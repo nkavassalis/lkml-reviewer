@@ -12,32 +12,22 @@ design doc; this file is "where the work actually stopped". Results are in
 Rewrite this section whenever the state changes; history goes in
 `docs/LEARNINGS.md` and `docs/REPORT.md`, not here.
 
-- **Published:** v3 (adapter + MLX 8-bit) as `nkavassalis/lkml-reviewer-lora`.
-  Never signs as Linus, beats base 51–24 blind, ties v2. README's journey
-  table has v1–v5 in two lines each.
-- **Running now (Nick, 2026-11-14: "start everything now, I am ok with some
-  day time downtime"):** v4's evaluation and judging on the cluster, GO_NOW
-  from 08:00 ET (hard stop 16:00; ~6 h); the multi-night v4 loop was stopped.
-  `RESULTS-v4.md` then triggers the FINISHED email and the queue. Training had
-  finished 06:49 (eval loss 2.121 → 1.885).
-- **Mac:** v4 MLX build done 08:28 (8.7 tok/s, 28.9 GB peak); v4 × 200 × 3
-  multi-sample running (~5 h), then `multisample-report` picks v5's starting
-  model. The build first failed on disk space (`docs/LEARNINGS.md`); the Mac
-  is now a dedicated test bed with ~248 GB free.
-- **v5's starting model needs Nick:** the judge preferred v3 over v4 45–28
-  (v4 makes more false claims about the patch). v5's own rubric scores both
-  (`rubric-score`) and is the evidence check's target; the report email has
-  all of it. The queue then stops at the human gate `v5-base-decision`; set `data/v5/BASE`
-  (v3 or v4), then `python3 train/workqueue.py approve v5-base-decision`.
-  PLAN-v5, "2026-11-14: a person confirms the starting model".
-- **Cluster outside the window until 2026-11-15 07:40 ET:**
-  `data/queue/runner/open-until` lets window items run today (§4e). Next on
-  the cluster: `dpo-smoke`, then `v5-candidates`. Delete the file to stop that.
-- **DPO is wired up but unproven:** `TRAINER=dpo` in the chain, resume and flat
-  adapter saves in `dpo_lora.py`; the `dpo-smoke` item is its first real run.
-  Not yet queued: DPO training, v5 evaluation, the v5 Mac build.
-- **Published:** v3 as `nkavassalis/lkml-reviewer-lora` (beats base 51–24
-  blind, ties v2). The README journey table has v1–v5.
+- **v4 is done and changed nothing** (REPORT §5c): v4 = v3 on 200 patches x 3
+  samples; both ~2/10 on v5's rubric. Cause: only 33% of training replies are
+  about the patch. The layout probe didn't replicate.
+- **Running now:** the review-only test (`rev-train`, cluster, GO_NOW from
+  16:29 ET): v3's recipe on the 1,718 patch-engaging pairs, then the same 100
+  held-out patches; `rev-report` scores it with v5's rubric and checks the
+  criteria in PLAN-v5 ('Decision: is "review-only" data the fix?'), emailed.
+- **Mac:** the thinking test (base with vs without reasoning, 30 patches),
+  started by hand; `think-report` scores it after `rev-report`.
+- **Waiting on Nick:** the judge audit pack (`data/judge-audit/AUDIT.md`,
+  emailed). `v5-base-decision` is parked (waiting-human; data/v5/BASE = v3);
+  the DPO pilot and candidates wait for the review-only result.
+- **Cluster outside the window until 2026-11-15 07:40 ET**
+  (`data/queue/runner/open-until`). `dpo-smoke` failed once (root-owned peer
+  dir; fixed) and retries after the review-only steps.
+- **Published:** v3 as `nkavassalis/lkml-reviewer-lora`.
 
 ## 1. What lives where
 

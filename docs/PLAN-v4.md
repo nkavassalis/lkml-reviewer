@@ -1,9 +1,12 @@
 # Plan: v4
 
-**Status:** running (2026-11-13). Lever picked: the patch-first layout (see
-"Update 2026-11-13" below). Trains in the overnight window from 2026-11-13;
-results arrive as `RESULTS-v4.md` and by email. The lever table below is kept
-as it was written before v3's results.
+**Status:** done (2026-11-14). **Outcome against the criteria:** neither
+target met (judge vs v3 38% of decided, needed >= 55%; names the patch with
+thread context 13%, needed >= 20%); gates held; still beats base 50-30. No
+measurable difference from v3 on 200 patches x 3 samples. Why: REPORT §5c
+(two-thirds of the training replies aren't about the patch; the layout probe
+didn't replicate). Lever picked was the patch-first layout ("Update
+2026-11-13" below); the lever table is kept as written before v3's results.
 
 ## What v3 showed so far (100 sampled held-out patches, 2026-11-13)
 

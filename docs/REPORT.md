@@ -195,6 +195,46 @@ Both are the v4 levers (`docs/PLAN-v4.md`).
 signatures, 0 email addresses. It does open by addressing a real developer by
 first name in 37% of replies (Linus: 27%).
 
+## 5c. v4 (2026-11-14)
+
+**What changed from v3:** only the input layout: the patch first, the earlier
+thread after it (v3: thread first). Same 5,165 pairs, recipe and held-out set.
+
+**Result: no measurable change from v3, on any measure.** It met neither
+target set before training (beat v3 in the judge with >= 55%; name the patch
+>= 20% with thread context), kept the gates, and still beats the base.
+
+| 200 held-out patches x 3 samples, identical inputs (MLX 8-bit) | v3 | v4 | difference (95% CI) |
+|---|---|---|---|
+| names something from the patch | 25% | 26% | +1% (-4..+5): noise |
+| length (chars) | 462 | 433 | -29 (-75..+16): noise |
+| loops | 0% | 0% | none |
+
+| 100 held-out patches | result |
+|---|---|
+| blind judge v4 vs v3 | 28 - 45 (18 tie, 9 invalid), p = 0.06, leans v3 |
+| blind judge v4 vs base | 50 - 30 (13 tie, 7 invalid): v4 better |
+| v5's rubric (1-10), v3 / v4 / base | 2.03 / 1.86 / 2.65 (v4 - v3: -0.18, CI -0.40..+0.05) |
+| false claims per review, v3 / v4 / base | 1.03 / 1.00 / 3.19 |
+| held-out loss | 2.121 -> 1.885 (v3's drop: 2.109 -> 1.872) |
+| median length, Linus / v3 / v4 | 929 / 370 / 287 chars |
+
+**Why it fell flat** (read after the results): only **33%** of the training
+replies name anything from the patch (held-out: 37%); the rest are design
+arguments, process, and answers to earlier messages in the thread. Our models
+name the patch at about that rate (25%). They learned the data; no layout
+change makes a model talk about the patch more often than its targets do. And
+the probe that made the layout look promising (v3 patch-first 43% vs 21%) did
+not replicate: 200 x 3 samples on identical bytes gives v3 24% thread-first vs
+25% patch-first. The pairwise judge prefers caution (no "saying little is not
+a virtue" clause), which is part of v3's 45-28. By v5's own rubric every
+fine-tune scores ~2/10 and the base model scores higher: our models are short
+and thin, more so each version (v2 437, v3 362, v4 274 chars).
+
+**Next:** the review-only test (PLAN-v5): v3's recipe on just the 1,718 pairs
+whose reply engages the patch (median reply 969 chars). The DPO pilot waits
+for it.
+
 ## 6. What we learned
 
 - **The style transferred, from 1,175 examples and one epoch.** The fine-tune

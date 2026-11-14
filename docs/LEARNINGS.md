@@ -278,3 +278,19 @@ signal. Tests in `tests/test_rubric.py`.
 **Generalizes:** yes: template `rubric.py`, METHOD.md and AGENTS.md: measure a
 decision with the scoring function the next step will optimize, not a proxy
 with a different rubric.
+
+## 2026-11-14: The layout probe didn't replicate, and the data was the ceiling
+
+**Believed:** thread context pulls the model off the patch; putting the patch
+first fixes much of it (probe: v3 patch-first named the patch 43% vs 21%), so
+v4 retrained with that layout.
+**Evidence:** 200 held-out patches x 3 samples on identical bytes: v3 24%
+thread-first vs 25% patch-first, v4 26%, all inside the noise floor; v4 = v3
+on every measure. Only 33% of the training replies name anything from the
+patch (held-out 37%); the models match the data's rate. The probe was 1 sample
+per patch on an earlier rendering of the inputs.
+**Changed:** REPORT §5c, PLAN-v4 done; the review-only test (PLAN-v5) trains
+on the 1,718 replies that engage the patch.
+**Generalizes:** yes: template METHOD.md: measure what fraction of the
+training targets do the task you want before blaming the model, and never
+build a version on a single-sample probe.
