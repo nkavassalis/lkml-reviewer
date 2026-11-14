@@ -50,6 +50,23 @@ after = ["v4-multisample", "rubric-score"]   # the rubric is decide.py's target 
 when = "scripts/q/ready.sh mac"
 
 [[item]]
+id = "rev-train"
+title = "Review-only SFT test: train on the 1,718 replies that engage the patch, then evaluate (cluster)"
+run = "scripts/q/rev-train.sh"
+est_min = 300
+after = ["v4-fetch"]
+when = "scripts/q/ready.sh cluster"
+window = true
+
+[[item]]
+id = "rev-report"
+title = "Review-only test report: v5's rubric, proxies, criteria from PLAN-v5"
+run = "scripts/q/rev-report.sh"
+est_min = 60
+after = ["rev-train"]
+when = "scripts/q/ready.sh cluster"   # the rubric needs vLLM serving
+
+[[item]]
 id = "dpo-smoke"
 title = "DPO smoke test on the cluster (synthetic pairs, 2 steps; mechanics only)"
 run = "scripts/q/dpo-smoke.sh"

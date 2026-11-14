@@ -60,3 +60,16 @@ def test_a_resumed_run_copies_the_checkpoint_to_the_peer_first(tmp_path):
     copy = next(i for i, c in enumerate(calls) if c.startswith("scp") and "run-5/adapter-latest" in c)
     assert rc == 0 and copy < first_train
     assert "resuming: copied run-5/adapter-latest (step 50)" in log
+
+
+def test_peer_copies_reclaim_root_owned_directories_first(tmp_path):
+    # the peer's run dirs are created by its container as root (dpo-smoke failure)
+    rc, calls, _ = run_chain(tmp_path, TRAINER="dpo", SFT_ADAPTER="run-4/adapter-final", PAIRS="v5/p.jsonl")
+    chown = next(i for i, c in enumerate(calls) if c.startswith("ssh") and "chown" in c and "/work/run-4" in c)
+    copy = next(i for i, c in enumerate(calls) if c.startswith("scp") and "run-4/adapter-final" in c)
+    assert rc == 0 and chown < copy
+
+
+def test_sft_data_files_can_be_chosen(tmp_path):
+    rc, calls, _ = run_chain(tmp_path, TRAIN_DATA="rev/sft.jsonl", EVAL_DATA="sft_eval.jsonl")
+    assert rc == 0 and all("--train rev/sft.jsonl --eval sft_eval.jsonl" in c for c in calls if "torchrun" in c)

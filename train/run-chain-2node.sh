@@ -15,7 +15,9 @@
 #   EPOCHS       default 1
 #   GRAD_ACCUM   per rank, default 4 (effective batch = 2 x GRAD_ACCUM)
 #   TRAIN_EXTRA  extra trainer args (e.g. "--limit 200 --max-steps 4" for a smoke test)
-#   TRAINER      sft (default: sft_lora.py on sft.jsonl) or dpo (dpo_lora.py; needs
+#   TRAIN_DATA / EVAL_DATA   sft training and held-out files under WORK (default
+#                sft.jsonl / sft_eval.jsonl); both nodes need them
+#   TRAINER      sft (default: sft_lora.py on TRAIN_DATA) or dpo (dpo_lora.py; needs
 #                SFT_ADAPTER, the adapter it starts from, and PAIRS, the preference
 #                file, both relative to WORK; the chain copies them to the peer)
 #   EVAL_ARMS_MASTER / EVAL_ARMS_PEER   compare.py arms per node, e.g. "base,v2" / "v3";
@@ -32,6 +34,8 @@ set -u
 : "${RUN:?}" "${PEER:?}" "${MASTER_ADDR:?}" "${IFACE:?}"
 EPOCHS=${EPOCHS:-1}
 TRAINER=${TRAINER:-sft}
+TRAIN_DATA=${TRAIN_DATA:-sft.jsonl}
+EVAL_DATA=${EVAL_DATA:-sft_eval.jsonl}
 case "$TRAINER" in
   sft) ;;
   dpo) : "${SFT_ADAPTER:?TRAINER=dpo needs SFT_ADAPTER}" "${PAIRS:?TRAINER=dpo needs PAIRS}" ;;
@@ -80,7 +84,7 @@ torchrun_cmd() {  # $1 = node rank
   if [ "$TRAINER" = dpo ]; then
     job="dpo_lora.py --sft-adapter $SFT_ADAPTER --pairs $PAIRS --out $RUN --epochs $EPOCHS --grad-accum $GRAD_ACCUM --save-every 25"
   else
-    job="sft_lora.py --train sft.jsonl --eval sft_eval.jsonl --out $RUN --epochs $EPOCHS --grad-accum $GRAD_ACCUM --save-every 50"
+    job="sft_lora.py --train $TRAIN_DATA --eval $EVAL_DATA --out $RUN --epochs $EPOCHS --grad-accum $GRAD_ACCUM --save-every 50"
   fi
   echo docker exec "${NCCL_ENV[@]}" -w /work "$TRAIN_CTR" torchrun --nnodes 2 \
     --nproc-per-node 1 --node-rank "$1" --master-addr "$MASTER_ADDR" --master-port $PORT \
@@ -91,7 +95,10 @@ torchrun_cmd() {  # $1 = node rank
 to_peer() {
   local rel=$1 pw; pw=$(basename "$WORK")
   docker exec "$TRAIN_CTR" chown -R "$(id -u):$(id -g)" "/work/$rel" >> "$LOG" 2>&1 || true
-  peer "rm -rf $pw/$rel && mkdir -p $pw/$(dirname "$rel")"
+  # The peer's run directories were made by its container, as root: hand the
+  # top-level one back first, or the copy can't write into it (dpo-smoke,
+  # 2026-11-14: "scp: stat remote: No such file or directory").
+  peer "docker exec $TRAIN_CTR chown -R $(id -u):$(id -g) /work/${rel%%/*} 2>/dev/null; rm -rf $pw/$rel && mkdir -p $pw/$(dirname "$rel")"
   scp -q -r "$WORK/$rel" "$PEER:$pw/$rel"
 }
 

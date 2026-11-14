@@ -85,6 +85,35 @@ honest but incomplete; changing the default after seeing a result is exactly
 what it was meant to prevent, so this is a person's call, written down, not a
 quiet edit to `choose_base.py`.
 
+## Decision: is "review-only" data the fix? (criteria set 2026-11-14, before training)
+
+v4's results (REPORT) showed v4 = v3 on every measure, and both score ~2/10 on
+v5's rubric. The likely cause: only 33% of the training replies name anything
+from the patch (held-out: 37%); the rest are design arguments and thread
+replies, and our models match that rate (25%). Nick, 2026-11-14: run the
+review-only test tonight instead of the DPO pilot ("Review-only SFT test").
+
+**The test:** v3's recipe (LoRA r16, lr 1e-4, 1 epoch, grad-accum 4, two
+nodes, patch-first layout) on only the 1,718 of v4's 5,165 training pairs whose
+reply names something from the patch (`data/rev/sft.jsonl`, same grounding
+metric as the evaluation; median reply 969 chars vs 619). Same held-out file
+and the same 100 patches as v3/v4. Confound: a third of the updates.
+
+**Optimizes:** what v5 is for: correct, substantive reviews of the patch.
+**Measured by:** v5's rubric (`train/rubric.py`, `make_preferences.ask`) on the
+100 held-out patches, paired against v3 (2.03) and v4 (1.86), as
+`train/decide.py`'s target; the proxies and gates from REPORT alongside.
+
+**It's the fix (v5's preference training starts from it) if:** the rubric
+score beats v3's with the 95% CI above zero, false claims per review don't
+rise beyond noise, and the gates hold (0 "Linus" signatures, 0 email
+addresses, no loops). **Not the fix if** the rubric is level or lower.
+
+**Pre-mortem:** it would mislead us if (1) it wins only by writing longer
+(check the rubric's reasons and length), (2) it names more identifiers but
+makes more false claims (the false-claims line), or (3) fewer updates simply
+undertrain it (held-out loss and style metrics vs v3's).
+
 ## Costs (estimates; measured numbers in brackets)
 
 | step | work | time |
