@@ -243,3 +243,16 @@ This `huggingface_hub` (2.4) keeps file data in a shared, deduplicated store
 prune` and re-checks free space before converting; CONVERSION.md.
 **Generalizes:** yes: template CONVERSION.md. Free cache space with the
 cache's own tool, and re-measure after.
+
+## 2026-11-14: The starting-model rule couldn't see what the next step is for
+
+**Believed:** a rule set before the data (v4 unless clearly worse on patch
+grounding or loops) was enough to pick v5's starting model automatically.
+**Evidence:** v4's blind judge against v3 came in at v3 45, v4 28; the reasons
+say v4 makes more false claims about the patch. Neither of the rule's metrics
+measures correctness, and v5 is preference training *for correctness*. Nick
+asked why we'd build on v4; the rule would have picked it without looking.
+**Changed:** a human gate (`v5-base-decision`) before candidate generation;
+PLAN-v5 dated note. `choose_base.py` unchanged (its output is one input).
+**Generalizes:** yes: template METHOD.md item 5: a pre-set rule must include
+the metric the next step optimizes, or it gets a human gate.

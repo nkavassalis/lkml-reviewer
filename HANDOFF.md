@@ -24,6 +24,11 @@ Rewrite this section whenever the state changes; history goes in
   multi-sample running (~5 h), then `multisample-report` picks v5's starting
   model. The build first failed on disk space (`docs/LEARNINGS.md`); the Mac
   is now a dedicated test bed with ~248 GB free.
+- **v5's starting model needs Nick:** the judge preferred v3 over v4 45–28
+  (v4 makes more false claims about the patch). The queue stops at the human
+  gate `v5-base-decision` after the multi-sample report; set `data/v5/BASE`
+  (v3 or v4), then `python3 train/workqueue.py approve v5-base-decision`.
+  PLAN-v5, "2026-11-14: a person confirms the starting model".
 - **Cluster outside the window until 2026-11-15 07:40 ET:**
   `data/queue/runner/open-until` lets window items run today (§4e). Next on
   the cluster: `dpo-smoke`, then `v5-candidates`. Delete the file to stop that.
@@ -200,7 +205,8 @@ patch-first`). v3's as-trained data: `data/train/run-3b/`.
    nodes (`deploy_train` in `scripts/q/lib.sh`: temp name + `mv`), then 16
    synthetic pairs, 2 DPO steps from run-4, a checkpoint, evaluation of the
    result (`data/cluster/night-plan-dpo-smoke.sh`). Mechanics only.
-4. `v5-candidates` (window, after `multisample-report`; deploys `compare.py`
+4. `v5-candidates` (window, after `multisample-report` and the human gate
+   `v5-base-decision`, added 2026-11-14; deploys `compare.py`
    first: the cluster's copy predated `--samples`): 800 training patches
    (seeded, `data/v5/in/`), 4 samples each from v5's starting model
    (`data/v5/BASE`: v4 unless the report shows v4 clearly worse than v3

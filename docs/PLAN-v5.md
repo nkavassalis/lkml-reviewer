@@ -57,6 +57,21 @@ from that model; the decision and its numbers are in the report email. The
 DPO step must use the same model for `--sft-adapter` (both the policy's
 starting point and the frozen reference).
 
+### 2026-11-14: a person confirms the starting model (Nick: "is v4 worse than v3? why would we build v5 on v4 if thats the case?")
+
+v4's blind judge against v3 (each in its own layout, 100 patches): **v3 45,
+v4 28**, 18 ties, 9 invalid. The reasons: v3 mostly wins because v4 makes a
+false claim about the patch; v4 wins when v3 is vague. v4 engages with the
+code more, and is wrong more often when it does. The rule above can't see
+this: its two metrics (grounding, loops) don't measure correctness, which is
+the thing v5 exists to improve, and grounding probably favours v4. So the rule
+still runs and writes `data/v5/BASE`, but the queue now waits at a human gate
+(`v5-base-decision`) before candidate generation; the decision, with both the
+multi-sample report and the judge results, gets dated here. The rule was
+honest but incomplete; changing the default after seeing a result is exactly
+what it was meant to prevent, so this is a person's call, written down, not a
+quiet edit to `choose_base.py`.
+
 ## Costs (estimates; measured numbers in brackets)
 
 | step | work | time |

@@ -51,11 +51,18 @@ when = "scripts/q/ready.sh cluster"
 window = true
 
 [[item]]
+id = "v5-base-decision"
+title = "Decide v5's starting model: v3 or v4 (multi-sample report + blind judge)"
+run = "true"
+after = ["v4-fetch", "multisample-report"]
+gate = "human"     # 2026-11-14: the judge preferred v3 45-28; choose_base.py can't see correctness
+
+[[item]]
 id = "v5-candidates"
 title = "v5: generate 4 reviews per patch for 800 training patches (cluster)"
 run = "scripts/q/v5-candidates.sh"
 est_min = 280          # one round of two chunks; resumes across windows (exit 75)
-after = ["v4-fetch", "multisample-report"]   # the report picks the starting model (data/v5/BASE)
+after = ["v4-fetch", "multisample-report", "v5-base-decision"]   # data/v5/BASE, confirmed by a person
 when = "scripts/q/ready.sh cluster"
 window = true
 
