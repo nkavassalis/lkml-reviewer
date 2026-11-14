@@ -179,3 +179,19 @@ Found while wiring v5's starting-model decision to that comparison.
 they used the earlier rendering.
 **Generalizes:** yes: before a paired comparison, checksum the inputs; "the same
 layout" by name is not the same bytes.
+
+## 2026-11-14: The morning report raced the next night
+
+**Believed:** the reporter, which follows `latest-run.log`, would see every
+night's "night done" line and send that night's report.
+**Evidence:** v4 training finished at 06:49 on 2026-11-14 and no email came.
+The multi-night loop started the next night's run 10 seconds after "night
+done", which repointed `latest-run.log` to a fresh log; the reporter checks every
+5 minutes, so it never saw the old night end. It also could have missed a plan
+failure the same way.
+**Changed:** `scripts/night-reporter.sh` checks the newest two run logs (per-log
+`check_log`). Dry run against the real logs with a fake sender: one report for
+night-2026-11-13, none repeated on the next check.
+**Generalizes:** yes: template reporter fixed the same way, and template
+OPERATIONS.md says why. A watcher that follows a "current" pointer misses events
+when the pointer moves faster than it polls.

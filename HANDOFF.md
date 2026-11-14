@@ -7,7 +7,7 @@ design doc; this file is "where the work actually stopped". Results are in
 
 ---
 
-## 0. Status (2026-11-13)
+## 0. Status (2026-11-14)
 
 Rewrite this section whenever the state changes; history goes in
 `docs/LEARNINGS.md` and `docs/REPORT.md`, not here.
@@ -15,12 +15,16 @@ Rewrite this section whenever the state changes; history goes in
 - **Published:** v3 (adapter + MLX 8-bit) as `nkavassalis/lkml-reviewer-lora`.
   Never signs as Linus, beats base 51–24 blind, ties v2. README's journey
   table has v1–v5 in two lines each.
-- **Running:** v4 (patch-first layout) trains in the 20:00–08:00 ET window from
-  2026-11-13, up to three nights; emails on problems and when done (§4d).
+- **Running:** v4 (patch-first layout). Training finished 2026-11-14 06:49
+  (eval loss 2.121 → 1.885 at step 639); its evaluation needs ~100 min and
+  runs at the start of the next window (20:00 ET 2026-11-14). The reporter
+  emails on problems, each morning and when `RESULTS-v4.md` lands (§4d); it
+  missed the first morning's report (fixed, `docs/LEARNINGS.md`).
 - **Queued after v4:** fetch, Mac build, multi-sample evaluation, v5 DPO data
   (candidates, judge scores, reading pack), then a human check; after v5, a
   greedy-decoding loop check (§4e). Runner: `scripts/queue-runner.sh status`.
-- **On the Mac now:** v3 multi-sample (200 patches × 3, two layouts), ~10 h.
+- **On the Mac:** v3 multi-sample done (200 patches × 3, both layouts); idle
+  until the queue builds v4.
 - **Not built yet:** chain support for `train/dpo_lora.py` (DPO smoke and
   training items get added at the human gate).
 

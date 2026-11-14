@@ -39,8 +39,39 @@ sent() { [ -f "$STATE/sent-$1" ]; }
 mark() { date '+%F %T' > "$STATE/sent-$1"; }
 key() { printf '%s' "$1" | md5sum | cut -c1-12; }
 
+# Per-run-log reports: GO_NOW start, plan failure, end of night.
+# $1 = run id (night-DATE / now-DATE-HHMM), $2 = its log, $3 = status.sh output
+check_log() {
+  local nightlog=$2
+
+  # 2b. a run started outside the window ("go for it"): say so at the start
+  if echo "$nightlog" | grep -q "GO_NOW: started" && ! sent "started-$1"; then
+    { echo "A run was started now, by request, rather than waiting for the window:"; echo;
+      echo "$nightlog" | head -5; } | notify "Started: $1" && mark "started-$1"
+  fi
+  # Exact, case-sensitive markers: "hard stop at 14:00" in a healthy start line
+  # must not count. Keyed on the FIRST failure line, so one failure = one email
+  # even as the log grows ("FAILED" then "plan finished (exit status 1)").
+  local fail_re='FAILED|HARD STOP reached|Traceback|exit status [1-9]'
+  if echo "$nightlog" | grep -qE "$fail_re"; then
+    local k; k="planfail-$1-$(key "$(echo "$nightlog" | grep -E "$fail_re" | head -1)")"
+    if ! sent "$k"; then
+      { echo "The night's plan logged a failure or hit the hard stop:"; echo;
+        echo "$nightlog" | tail -40; } | notify "PROBLEM in tonight's plan ($1)" && mark "$k"
+    fi
+  fi
+
+  # 4. Night report: once the launcher logged the end of the night
+  if echo "$nightlog" | grep -q "night done" && ! sent "night-$1"; then
+    { echo "Night of $1: done. vLLM restored on all nodes (checked by the launcher)."; echo;
+      echo "--- plan log:"; echo "$nightlog" | tail -60; echo;
+      echo "--- training ($RUN):"; remote "grep -E 'step [0-9]+/|eval loss|checkpoint at|DONE' ~/$WORKDIR/${RUN}/train.log 2>/dev/null | tail -6"; echo;
+      echo "--- status now:"; echo "$3"; } | notify "Report: $1" && mark "night-$1"
+  fi
+}
+
 check_once() {
-  local night status rc nightlog
+  local night status rc
   # Follow the launcher's latest-run.log link: the same reporting for a
   # windowed night (night-DATE.log) and a "go for it" run (now-DATE-HHMM.log).
   night=$(remote "readlink ~/$WORKDIR/latest-run.log 2>/dev/null" | sed 's/\.log$//')
@@ -65,33 +96,13 @@ check_once() {
     fi
   fi
 
-  # 3. PROBLEM: the plan itself logged a failure
-  nightlog=$(remote "cat ~/$WORKDIR/latest-run.log 2>/dev/null")
-
-  # 2b. a run started outside the window ("go for it"): say so at the start
-  if echo "$nightlog" | grep -q "GO_NOW: started" && ! sent "started-$night"; then
-    { echo "A run was started now, by request, rather than waiting for the window:"; echo;
-      echo "$nightlog" | head -5; } | notify "Started: $night" && mark "started-$night"
-  fi
-  # Exact, case-sensitive markers: "hard stop at 14:00" in a healthy start line
-  # must not count. Keyed on the FIRST failure line, so one failure = one email
-  # even as the log grows ("FAILED" then "plan finished (exit status 1)").
-  local fail_re='FAILED|HARD STOP reached|Traceback|exit status [1-9]'
-  if echo "$nightlog" | grep -qE "$fail_re"; then
-    local k; k="planfail-$night-$(key "$(echo "$nightlog" | grep -E "$fail_re" | head -1)")"
-    if ! sent "$k"; then
-      { echo "The night's plan logged a failure or hit the hard stop:"; echo;
-        echo "$nightlog" | tail -40; } | notify "PROBLEM in tonight's plan ($night)" && mark "$k"
-    fi
-  fi
-
-  # 4. Night report: once the launcher logged the end of the night
-  if echo "$nightlog" | grep -q "night done" && ! sent "night-$night"; then
-    { echo "Night of $night: done. vLLM restored on all nodes (checked by the launcher)."; echo;
-      echo "--- plan log:"; echo "$nightlog" | tail -60; echo;
-      echo "--- training ($RUN):"; remote "grep -E 'step [0-9]+/|eval loss|checkpoint at|DONE' ~/$WORKDIR/${RUN}/train.log 2>/dev/null | tail -6"; echo;
-      echo "--- status now:"; echo "$status"; } | notify "Report: $night" && mark "night-$night"
-  fi
+  # 3-4. Read the newest TWO run logs, not only the one latest-run.log points
+  # at: a multi-night loop starts the next night seconds after "night done",
+  # repointing the link long before the next check (a missed report, 2026-11-14).
+  local log
+  for log in $(remote "cd ~/$WORKDIR/ && ls -t night-*.log now-*.log 2>/dev/null | head -2"); do
+    check_log "${log%.log}" "$(remote "cat ~/$WORKDIR/$log")" "$status"
+  done
   return 0
 }
 

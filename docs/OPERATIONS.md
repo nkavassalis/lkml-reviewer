@@ -72,8 +72,11 @@ it down). Every 5 minutes it checks, and it sends:
 | **Report** | the run ended (the launcher logged `night done`): plan log, training progress, status |
 | **FINISHED** | the plan wrote its results file (`RESULTS_FILE`); the email carries it, then the reporter stops |
 
-It follows the launcher's `latest-run.log` link, so windowed nights and go-now
-runs report identically. Sending is pluggable: `NOTIFY_CMD` is any command
+It reads the newest two run logs (windowed `night-DATE.log` and go-now
+`now-DATE-HHMM.log` alike), not just the one `latest-run.log` points at: a
+multi-night loop starts the next night seconds after "night done", long
+before the next check, and following the link alone missed a morning report
+(lkml-reviewer, 2026-11-14). Sending is pluggable: `NOTIFY_CMD` is any command
 that takes the subject as its last argument and the body on stdin
 (e.g. a Gmail sender script that reads its own credentials, ntfy, Slack, sendmail). Without one, messages go to
 `notifications.log` only. Credentials never pass through these scripts.
