@@ -24,7 +24,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # repo root: li
 from mlx_lm import load, stream_generate  # noqa: E402
 from mlx_lm.sample_utils import make_logits_processors, make_sampler  # noqa: E402
 
-from linuspr.template import TRUNC_MARK, prompt_text  # noqa: E402
+from linuspr.template import TRUNC_MARK, prompt_text, split_thinking  # noqa: E402
 
 SAMPLING = {"temperature": 0.7, "top_p": 0.95, "repetition_penalty": 1.1}  # = compare.py
 
@@ -46,6 +46,11 @@ def main() -> None:
     ap.add_argument("--greedy", action="store_true",
                     help="argmax, no repetition penalty (as compare.py's greedy mode): "
                          "measures looping, which sampling hides")
+    ap.add_argument("--thinking", action="store_true",
+                    help="let the model reason first (enable_thinking); the review is what follows "
+                         "</think>, the reasoning's length goes in KEY_think_chars, and a reasoning "
+                         "that never closed (out of tokens) stores an empty review. Base model only: "
+                         "the fine-tunes were trained without thinking")
     args = ap.parse_args()
 
     with open(args.eval) as f:
@@ -74,7 +79,7 @@ def main() -> None:
             ids = hf(user, add_special_tokens=False)["input_ids"]
             if len(ids) > args.max_prompt:  # same truncation as compare.py
                 user = hf.decode(ids[: args.max_prompt]) + TRUNC_MARK
-            prompt = prompt_text(hf, user)
+            prompt = prompt_text(hf, user, thinking=args.thinking)
             out = {"eval_index": i, "input": rows[i]["input"], "reference": rows[i]["output"]}
             for k in range(args.samples):
                 import mlx.core as mx  # noqa: PLC0415
@@ -84,7 +89,13 @@ def main() -> None:
                                             sampler=sampler, logits_processors=procs):
                     text += last.text
                 key = args.key if args.samples == 1 else f"{args.key}_s{k}"
-                out[key] = text.strip()
+                if args.thinking:
+                    reasoning, review = split_thinking(text)
+                    out[key] = review or ""
+                    out[f"{key}_think_chars"] = len(reasoning)
+                    out[f"{key}_think_closed"] = review is not None
+                else:
+                    out[key] = text.strip()
                 out["gen_tps"] = round(last.generation_tps, 2) if last else 0
                 out["peak_gb"] = round(last.peak_memory, 1) if last else 0
             fh.write(json.dumps(out) + "\n")

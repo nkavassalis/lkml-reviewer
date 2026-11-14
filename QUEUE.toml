@@ -67,6 +67,14 @@ after = ["rev-train"]
 when = "scripts/q/ready.sh cluster"   # the rubric needs vLLM serving
 
 [[item]]
+id = "think-report"
+title = "Thinking test: v5's rubric on the base with vs without reasoning (30 patches)"
+run = "scripts/q/think-report.sh"
+est_min = 30
+after = ["rev-report"]     # think-build + think-run were started by hand on 2026-11-14 (the Mac only)
+when = "scripts/q/ready.sh mac && scripts/q/ready.sh cluster"   # Mac done; vLLM serving for the rubric
+
+[[item]]
 id = "dpo-smoke"
 title = "DPO smoke test on the cluster (synthetic pairs, 2 steps; mechanics only)"
 run = "scripts/q/dpo-smoke.sh"

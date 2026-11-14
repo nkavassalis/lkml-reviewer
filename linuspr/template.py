@@ -91,9 +91,21 @@ def chat_messages(user: str) -> list[dict[str, str]]:
     return [{"role": "system", "content": SYSTEM}, {"role": "user", "content": user}]
 
 
-def prompt_text(tok, user: str) -> str:
-    """Rendered prompt, thinking off: the model was trained with an empty
-    <think></think> block, so inference must use the same."""
+def prompt_text(tok, user: str, thinking: bool = False) -> str:
+    """Rendered prompt, thinking off by default: the fine-tunes were trained
+    with an empty <think></think> block, so their inference must use the same.
+    thinking=True lets a model reason first (an experiment on the base model:
+    does reasoning make reviews more accurate?); see split_thinking."""
     return tok.apply_chat_template(
-        chat_messages(user), tokenize=False, add_generation_prompt=True, enable_thinking=False
+        chat_messages(user), tokenize=False, add_generation_prompt=True, enable_thinking=thinking
     )
+
+
+def split_thinking(text: str) -> tuple[str, str | None]:
+    """(reasoning, review) from a thinking-mode generation. The review is what
+    follows the last </think>; None if the model never closed its reasoning
+    (it ran out of tokens), so a truncated think isn't scored as a review."""
+    if "</think>" not in text:
+        return text.replace("<think>", "").strip(), None
+    head, _, tail = text.rpartition("</think>")
+    return head.replace("<think>", "").strip(), tail.strip()
