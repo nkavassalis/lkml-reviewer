@@ -9,6 +9,11 @@
 # and only if their estimate fits before the hard stop; they get
 # WINDOW_MINUTES_LEFT in the environment to size their own hard stop
 # (e.g. GO_NOW=1 MAX_HOURS=... night-run.sh on the cluster).
+#
+# Downtime allowed outside the window, for a while ("start everything now"):
+#   echo "2026-11-15 07:40 EST" > $STATE_DIR/open-until
+# Until then window items may start, sized to that time (or the window's own
+# hard stop, if later). Expired or unreadable = ignored; delete it to cancel.
 set -u
 root="$(cd "$(dirname "$0")/.." && pwd)"
 . "$root/train/window-lib.sh"
@@ -20,9 +25,19 @@ wq() { "$PY" "$root/train/workqueue.py" "$@"; }
 notify() { "$root/scripts/notify.sh" "${NOTIFY_PREFIX:-[queue]} $1"; }
 title() { "$PY" -c "import sys,tomllib;q=tomllib.load(open(sys.argv[1],'rb'));print(next(i['title'] for i in q['item'] if i['id']==sys.argv[2]))" "${QUEUE_FILE:-$root/QUEUE.toml}" "$1"; }
 
+open_until() {
+  local f="$STATE_DIR/open-until" u
+  [ -f "$f" ] || return 1
+  u=$(date -d "$(cat "$f")" +%s 2>/dev/null) || return 1
+  [ "$u" -gt "$(_now)" ] && echo "$u"
+}
+
 once() {
-  local open=0 left=0 out id
+  local open=0 left=0 out id u o
   window_open && open=1 && left=$(window_remaining_min)
+  if u=$(open_until); then
+    open=1; o=$(( (u - $(_now)) / 60 )); [ "$o" -gt "$left" ] && left=$o
+  fi
   out=$(wq next --window-open $open --minutes-left "$left")
   for w in $(echo "$out" | awk '/^WAITING/ {print $2}'); do
     wq waiting "$w" > /dev/null

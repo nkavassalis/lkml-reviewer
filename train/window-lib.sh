@@ -21,6 +21,9 @@ _epoch_tomorrow() { TZ=$WINDOW_TZ date -d "$(TZ=$WINDOW_TZ date -d @"$(( $(_now)
 # Epoch of the window's hard stop (end minus margin) for a window that is open
 # now or opens next.
 window_deadline() {
+  # night-run.sh exports its own hard stop (GO_NOW + MAX_MINUTES, say), so a
+  # plan's need_minutes measures against the deadline that will actually kill it.
+  if [ -n "${PLAN_DEADLINE:-}" ]; then echo "$PLAN_DEADLINE"; return; fi
   local now start end
   now=$(_now)
   end=$(_epoch "$WINDOW_END")

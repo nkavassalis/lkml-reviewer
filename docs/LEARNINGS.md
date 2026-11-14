@@ -195,3 +195,38 @@ night-2026-11-13, none repeated on the next check.
 **Generalizes:** yes: template reporter fixed the same way, and template
 OPERATIONS.md says why. A watcher that follows a "current" pointer misses events
 when the pointer moves faster than it polls.
+
+## 2026-11-14: A "go now" launch measured against the wrong deadline
+
+**Believed:** `GO_NOW=1 MAX_MINUTES=480 night-run.sh` gives the plan 8 hours.
+**Evidence:** launched at 07:59 ET, the plan logged "skipping v4 evaluation:
+needs ~100 min, -19 left" and exited. `need_minutes` in the plan only knew the
+regular window, whose hard stop (07:40) had passed; night-run's own deadline
+never reached it. The queue's cluster steps launch the same way.
+**Changed:** `night-run.sh` exports `PLAN_DEADLINE`; `window_deadline` uses it;
+`test_a_go_now_deadline_overrides_the_window`.
+**Generalizes:** yes: template `night-run.sh`, `window-lib.sh`, test and
+OPERATIONS.md. Pass a deadline down to whatever checks it, rather than letting
+each layer recompute it.
+
+## 2026-11-14: Code written ahead of time, read before its first run
+
+**Believed:** the drafted DPO trainer worked like `sft_lora.py` ("same
+checkpointing and --resume-auto conventions"), and the cluster ran the code we
+had tested.
+**Evidence:** read before wiring it in: (1) `dpo_lora.py` had no resume; (2)
+PEFT 0.21 saves an adapter not named "default" to `adapter-final/policy/`, so
+the chain's success check and the Mac conversion would have found nothing;
+(3) on two nodes only rank 0 writes checkpoints, so a resumed `sft_lora.py`
+run would restart rank 1 from step 0 (never hit: v4 trained in one night);
+(4) the cluster's `compare.py` predated `--samples`, which v5's candidate step
+needs. Separately, `pkill -f` over ssh killed the ssh session itself, a
+variant of the 2026-11-13 trap.
+**Changed:** `train/adapter_ckpt.py` (flat, atomic saves; resume point) with
+`tests/test_adapter_ckpt.py`; `dpo_lora.py --resume-auto`; `TRAINER=dpo` and a
+checkpoint copy to the peer in `run-chain-2node.sh`, `tests/test_chain.py`;
+`deploy_train` in the queue steps; a `dpo-smoke` queue item before any real
+DPO run.
+**Generalizes:** yes: template chain copies checkpoints to the peer (test
+added); OPERATIONS.md says to deploy in the step and checksum the nodes, and
+to test a resume on purpose.

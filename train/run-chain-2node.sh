@@ -14,7 +14,10 @@
 #   IFACE        that link's interface name, for NCCL/Gloo sockets (required)
 #   EPOCHS       default 1
 #   GRAD_ACCUM   per rank, default 4 (effective batch = 2 x GRAD_ACCUM)
-#   TRAIN_EXTRA  extra sft_lora.py args (e.g. "--limit 200 --max-steps 4" for a smoke test)
+#   TRAIN_EXTRA  extra trainer args (e.g. "--limit 200 --max-steps 4" for a smoke test)
+#   TRAINER      sft (default: sft_lora.py on sft.jsonl) or dpo (dpo_lora.py; needs
+#                SFT_ADAPTER, the adapter it starts from, and PAIRS, the preference
+#                file, both relative to WORK; the chain copies them to the peer)
 #   EVAL_ARMS_MASTER / EVAL_ARMS_PEER   compare.py arms per node, e.g. "base,v2" / "v3";
 #                empty EVAL_ARMS_MASTER skips evaluation
 #   EVAL_ADAPTERS_MASTER / EVAL_ADAPTERS_PEER   name=path lists for compare.py
@@ -28,6 +31,12 @@
 set -u
 : "${RUN:?}" "${PEER:?}" "${MASTER_ADDR:?}" "${IFACE:?}"
 EPOCHS=${EPOCHS:-1}
+TRAINER=${TRAINER:-sft}
+case "$TRAINER" in
+  sft) ;;
+  dpo) : "${SFT_ADAPTER:?TRAINER=dpo needs SFT_ADAPTER}" "${PAIRS:?TRAINER=dpo needs PAIRS}" ;;
+  *) echo "TRAINER must be sft or dpo" >&2; exit 2 ;;
+esac
 GRAD_ACCUM=${GRAD_ACCUM:-4}
 TRAIN_EXTRA=${TRAIN_EXTRA:-}
 EVAL_ARMS_MASTER=${EVAL_ARMS_MASTER:-}
@@ -49,10 +58,10 @@ restore() {
   say "restoring $SERVE_CTR on both nodes (exit status $status)"
   # If one rank died, the other would wait out the NCCL timeout holding its GPU,
   # and the serving container could not start there. Kill leftovers first.
-  docker exec "$TRAIN_CTR" pkill -f "sft_lora.py|compare.py" >> "$LOG" 2>&1 || true
+  docker exec "$TRAIN_CTR" pkill -f "sft_lora.py|dpo_lora.py|compare.py" >> "$LOG" 2>&1 || true
   # Quoted as ONE remote command string: ssh re-parses it, and a bare | in the
   # pattern became a shell pipe on the peer ("compare.py: command not found").
-  peer "docker exec $TRAIN_CTR pkill -f 'sft_lora.py|compare.py'" >> "$LOG" 2>&1 || true
+  peer "docker exec $TRAIN_CTR pkill -f 'sft_lora.py|dpo_lora.py|compare.py'" >> "$LOG" 2>&1 || true
   sleep 5
   docker start "$SERVE_CTR" >> "$LOG" 2>&1
   peer docker start "$SERVE_CTR" >> "$LOG" 2>&1
@@ -67,10 +76,23 @@ set -e
 NCCL_ENV=(-e "NCCL_SOCKET_IFNAME=$IFACE" -e "GLOO_SOCKET_IFNAME=$IFACE" -e NCCL_IB_DISABLE=1
           -e NCCL_DEBUG=WARN)
 torchrun_cmd() {  # $1 = node rank
+  local job
+  if [ "$TRAINER" = dpo ]; then
+    job="dpo_lora.py --sft-adapter $SFT_ADAPTER --pairs $PAIRS --out $RUN --epochs $EPOCHS --grad-accum $GRAD_ACCUM --save-every 25"
+  else
+    job="sft_lora.py --train sft.jsonl --eval sft_eval.jsonl --out $RUN --epochs $EPOCHS --grad-accum $GRAD_ACCUM --save-every 50"
+  fi
   echo docker exec "${NCCL_ENV[@]}" -w /work "$TRAIN_CTR" torchrun --nnodes 2 \
     --nproc-per-node 1 --node-rank "$1" --master-addr "$MASTER_ADDR" --master-port $PORT \
-    sft_lora.py --train sft.jsonl --eval sft_eval.jsonl --out "$RUN" --epochs "$EPOCHS" \
-    --grad-accum "$GRAD_ACCUM" --save-every 50 $TRAIN_EXTRA
+    $job $TRAIN_EXTRA
+}
+# Copy WORK-relative $1 to the same place on the peer (a fresh copy: scp -r
+# into an existing directory nests it).
+to_peer() {
+  local rel=$1 pw; pw=$(basename "$WORK")
+  docker exec "$TRAIN_CTR" chown -R "$(id -u):$(id -g)" "/work/$rel" >> "$LOG" 2>&1 || true
+  peer "rm -rf $pw/$rel && mkdir -p $pw/$(dirname "$rel")"
+  scp -q -r "$WORK/$rel" "$PEER:$pw/$rel"
 }
 
 say "stopping $SERVE_CTR on both nodes"
@@ -80,7 +102,16 @@ peer docker stop -t 60 "$SERVE_CTR" >> "$LOG" 2>&1
 if [ "${EVAL_ONLY:-0}" = 1 ]; then
   say "EVAL_ONLY: skipping training, evaluating existing $RUN/adapter-final"
 else
-say "training $RUN on 2 nodes"
+say "training $RUN on 2 nodes ($TRAINER)"
+if [ "$TRAINER" = dpo ]; then
+  to_peer "$SFT_ADAPTER"; to_peer "$PAIRS"
+fi
+# Only rank 0 writes checkpoints. A resumed run needs the same checkpoint on the
+# peer, or rank 1 restarts from step 0 and the ranks disagree on the steps left.
+if [ -f "$WORK/$RUN/adapter-latest/STEP" ]; then
+  to_peer "$RUN/adapter-latest"
+  say "resuming: copied $RUN/adapter-latest (step $(cat "$WORK/$RUN/adapter-latest/STEP")) to the peer"
+fi
 peer "$(torchrun_cmd 1)" > "$WORK/$RUN.rank1.out" 2>&1 &
 rank1=$!
 $(torchrun_cmd 0) > "$WORK/$RUN.out" 2>&1

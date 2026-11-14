@@ -3,6 +3,8 @@
 **Status:** queued (2026-11-13, Nick: "queue those work items to happen after
 v4"). Candidate generation, scoring and the reading pack run from `QUEUE.toml`
 after v4; DPO training waits for the human check of the pairs (HANDOFF §4e).
+2026-11-14, Nick: "start everything now, I am ok with some day time downtime":
+the queue may use the cluster outside the window until 07:40 ET on 11-15.
 
 ## Why
 
@@ -89,12 +91,18 @@ weaker signal), or K = 2 (one pair per patch, no "worst of 4" selection).
   but means an external API and sending the data out; Nick's call.
 - Five nights of window plus judge load on the serving stack.
 
-## Code (drafted, not run)
+## Code
 
 - `train/make_preferences.py`: candidates → judge scores → (chosen, rejected)
-  pairs, resumable, with the drop rules above.
+  pairs, resumable, with the drop rules above. Tested end to end against a fake
+  judge.
 - `train/dpo_lora.py`: DPO with policy and reference as two adapters on one
-  base, same DDP / memory cap / resume / checkpointing as `sft_lora.py`.
+  base, DDP and the memory cap as `sft_lora.py`. Reading it before its first
+  run (2026-11-14) found no resume and adapter saves that PEFT would put in a
+  `policy/` subdirectory; both fixed (`train/adapter_ckpt.py`, tests).
+- `train/run-chain-2node.sh` runs it with `TRAINER=dpo SFT_ADAPTER=...
+  PAIRS=...` and copies those inputs, and any checkpoint, to the peer.
 
-Both get the smoke-test treatment (the whole chain at tiny sizes, inside a
-window) before any real run.
+Not run on the cluster yet. The `dpo-smoke` queue item (16 synthetic pairs, 2
+steps, a checkpoint, then evaluation loads the result) runs before
+candidate generation, so mechanics are proven before the real pairs exist.

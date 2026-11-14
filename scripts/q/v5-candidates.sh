@@ -22,6 +22,9 @@ say "starting model: $base (patch-first inputs either way)"
 on_master "mkdir -p ~/$W/cands" && scp -q "$d"/in/chunk-*.jsonl "$d/BASE" "$MASTER:$W/cands/"
 : "${PEER_FAST:?PEER_FAST (peer address as seen from the master) missing from .status.env}"
 on_master "ssh -o BatchMode=yes $PEER_FAST mkdir -p $W/cands && scp -q ~/$W/cands/chunk-*.jsonl $PEER_FAST:$W/cands/"
+# compare.py --samples (multi-sample) must be on both nodes: the cluster had an
+# older copy without it until 2026-11-14.
+deploy_train compare.py run-chain-2node.sh night-run.sh window-lib.sh || exit 1
 cluster_plan night-plan-cands.sh; rc=$?
 [ $rc -eq 0 ] || [ $rc -eq 75 ] || exit $rc
 mkdir -p "$d/out"; scp -q "$MASTER:$W/cands/out-*.jsonl" "$d/out/" 2>/dev/null || true

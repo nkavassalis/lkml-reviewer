@@ -1,6 +1,7 @@
-"""DPO on top of an SFT LoRA (docs/PLAN-v5.md, step 3). DRAFT: not yet run.
+"""DPO on top of an SFT LoRA (docs/PLAN-v5.md, step 3). Not yet run on the cluster.
 
-    python3 dpo_lora.py --sft-adapter run-4/adapter-final --pairs pairs.jsonl --out run-5
+    python3 dpo_lora.py --sft-adapter run-4/adapter-final --pairs pairs.jsonl --out run-5 --resume-auto
+    (run-chain-2node.sh with TRAINER=dpo SFT_ADAPTER=... PAIRS=... runs it on both nodes)
     torchrun --nnodes 2 ... dpo_lora.py ...        (data parallel, as sft_lora.py)
 
 One copy of the base model carries two adapters: "ref", the frozen SFT
@@ -8,7 +9,11 @@ adapter, and "policy", a trainable copy of it. Per pair: reference
 log-probs (ref active, no grad), then chosen and rejected through the policy
 as ONE padded batch (two separate DDP forwards before one backward would
 break DDP's gradient bookkeeping), then the DPO loss (dpo_core.py).
-Same memory cap, checkpointing and --resume-auto conventions as sft_lora.py.
+Same memory cap and --resume-auto convention as sft_lora.py: every --save-every
+steps rank 0 writes OUT/adapter-latest (policy weights, optimizer.pt, STEP), and
+adapter-final at the end, both flat (adapter_ckpt.publish_adapter: PEFT would
+put a named adapter in a policy/ subdirectory). The chain copies adapter-latest
+to the peer before a resumed run, so both ranks resume at the same step.
 """
 from __future__ import annotations
 
@@ -26,6 +31,7 @@ os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
 
 import torch  # noqa: E402
 import torch.distributed as dist  # noqa: E402
+from adapter_ckpt import publish_adapter, resume_point  # noqa: E402
 from dpo_core import dpo_loss  # noqa: E402
 from peft import PeftModel  # noqa: E402
 from sft_lora import RANK, WORLD, all_sum, encode, log  # noqa: E402
@@ -69,6 +75,8 @@ def main() -> None:
     ap.add_argument("--limit", type=int, default=None, help="smoke test: first N pairs")
     ap.add_argument("--max-steps", type=int, default=None)
     ap.add_argument("--seed", type=int, default=7)
+    ap.add_argument("--resume-auto", action="store_true",
+                    help="resume from OUT/adapter-latest; exit if OUT/adapter-final exists")
     args = ap.parse_args()
     if DISTRIBUTED:
         dist.init_process_group("nccl", timeout=timedelta(hours=3))
@@ -76,8 +84,14 @@ def main() -> None:
     torch.cuda.set_per_process_memory_fraction(args.mem_fraction, 0)
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
+    state, resume_dir, resume_step = resume_point(out) if args.resume_auto else ("fresh", None, 0)
+    if state == "done":
+        print(f"{out}/adapter-final exists: this run is already complete", flush=True)
+        return
     fh = open(out / "train.log", "a")  # noqa: SIM115
     log(fh, f"args {vars(args)} world {WORLD}")
+    if resume_dir:
+        log(fh, f"resuming from {resume_dir} at step {resume_step}")
     random.seed(args.seed)
 
     tok = AutoTokenizer.from_pretrained(args.model)
@@ -99,7 +113,8 @@ def main() -> None:
     base.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
     base.enable_input_require_grads()
     model = PeftModel.from_pretrained(base, args.sft_adapter, adapter_name="ref")
-    model.load_adapter(args.sft_adapter, adapter_name="policy", is_trainable=True)
+    # The policy starts as a copy of the SFT adapter, or where the last run stopped.
+    model.load_adapter(str(resume_dir or args.sft_adapter), adapter_name="policy", is_trainable=True)
 
     def use(name: str) -> None:
         model.set_adapter(name)
@@ -114,6 +129,9 @@ def main() -> None:
     if DISTRIBUTED:
         model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[0])
     opt = torch.optim.AdamW(params, lr=args.lr, weight_decay=0.0, betas=(0.9, 0.99))
+    if resume_dir and (resume_dir / "optimizer.pt").exists():
+        opt.load_state_dict(torch.load(resume_dir / "optimizer.pt", map_location="cuda", weights_only=True))
+        log(fh, "resumed optimizer state")
     total = math.ceil(math.ceil(len(data) / (args.grad_accum * WORLD)) * args.epochs)
     if args.max_steps:
         total = min(total, args.max_steps)
@@ -122,7 +140,9 @@ def main() -> None:
     order = list(range(len(data)))
     random.shuffle(order)
     order = order[RANK::WORLD]
-    step, micro, stats = 0, 0, []
+    # The order is fixed by the seed and walked by `micro`, so resuming is just
+    # starting the walk where the checkpoint left it.
+    step, micro, stats = resume_step, resume_step * args.grad_accum, []
     t0 = time.time()
     while step < total:
         (c, r) = data[order[micro % len(order)]]
@@ -153,10 +173,16 @@ def main() -> None:
         log(fh, f"step {step}/{total} pref-acc {acc / n:.2f} margin {margin / n:.3f} lr {lr:.1e} "
             f"{(time.time() - t0) / 60:.0f} min")
         stats = []
-        if args.save_every and step % args.save_every == 0 and RANK == 0:
-            core.save_pretrained(out / "adapter-latest", selected_adapters=["policy"])
+        if args.save_every and step % args.save_every == 0 and step < total and RANK == 0:
+            tmp = out / "adapter-latest.saving"
+            core.save_pretrained(tmp, selected_adapters=["policy"])
+            torch.save(opt.state_dict(), tmp / "optimizer.pt")
+            (tmp / "STEP").write_text(str(step))
+            publish_adapter(tmp, "policy", out / "adapter-latest")
+            log(fh, f"checkpoint at step {step} -> {out / 'adapter-latest'}")
     if RANK == 0:
-        core.save_pretrained(out / "adapter-final", selected_adapters=["policy"])
+        core.save_pretrained(out / "adapter-final.saving", selected_adapters=["policy"])
+        publish_adapter(out / "adapter-final.saving", "policy", out / "adapter-final")
         log(fh, f"DONE. policy adapter at {out / 'adapter-final'}")
     if DISTRIBUTED:
         dist.barrier()

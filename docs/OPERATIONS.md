@@ -115,7 +115,19 @@ hosts from `.status.env`. Rules learned building it:
 - **Human gates** (`gate = "human"`) email "Needs you" once and wait for
   `python3 train/workqueue.py approve ID`.
 - `pgrep -f` over ssh matches the remote shell running it: bracket a letter
-  (`'[c]ompare.py'`).
+  (`'[c]ompare.py'`). `pkill -f` is worse: on 2026-11-14 it killed the ssh
+  session that ran it, and the launch after it on the same line never happened.
+- **Downtime outside the window, when the owner allows it:** write an end time
+  to `data/queue/runner/open-until` (any `date -d` string); window items start
+  until then, sized to it. It expires by itself. Plans launched GO_NOW get
+  night-run's real deadline (`PLAN_DEADLINE`), so their `need_minutes` checks
+  measure against what will actually stop them; before that fix, a GO_NOW
+  launch at 07:59 skipped everything ("-19 min left").
+- **Deploy before you depend on it:** `deploy_train` (`scripts/q/lib.sh`)
+  copies training scripts to both nodes before a step uses them. The cluster
+  had an older `compare.py` without `--samples`; v5's candidate step would
+  have failed on its first chunk. Compare checksums (local, master, peer)
+  before trusting that the cluster runs the code you tested.
 - **Never overwrite a script bash is running** (the v4 loop's `night-run.sh`
   waits for hours): bash reads it as it goes. Copy to a temporary name and `mv`
   over it.

@@ -24,6 +24,20 @@ master_idle() { ! on_master "pgrep -f '[n]ight-run.sh|[r]un-chain|[s]ft_lora.py|
 mac_idle() { ! on_mac "pgrep -f '[c]ompare_mlx.py|[e]val_loss_mlx.py|[c]onvert-mlx.sh|[m]ulti-sample-queue.sh' >/dev/null"; }
 # Run a cluster plan now, inside the window, with a hard stop sized to the time
 # left (WINDOW_MINUTES_LEFT from the queue runner); waits for it to finish.
+# Copy train/<files> to the master's and the peer's work dirs. Each lands under a
+# temporary name and is renamed into place: bash reads a running script as it
+# goes, and a chain may be running from the old copy (docs/LEARNINGS.md).
+deploy_train() {
+  : "${PEER_FAST:?PEER_FAST missing from .status.env}"
+  local f
+  for f in "$@"; do
+    scp -q "$QROOT/train/$f" "$MASTER:$W/.$f.new" || return 1
+    on_master "cd ~/$W && chmod --reference=$f .$f.new 2>/dev/null; mv .$f.new $f && \
+      scp -q $f $PEER_FAST:$W/.$f.new && ssh -o BatchMode=yes $PEER_FAST 'cd $W && mv .$f.new $f'" || return 1
+  done
+  say "deployed to both nodes: $*"
+}
+
 cluster_plan() {
   local plan=$1 mins=$(( ${WINDOW_MINUTES_LEFT:-60} - 10 ))
   [ "$mins" -ge 30 ] || { say "not enough window left ($mins min)"; return 75; }

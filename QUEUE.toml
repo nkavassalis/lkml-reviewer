@@ -4,6 +4,13 @@
 # Edit freely: add, reorder, remove. State is in data/queue/state.json.
 
 [[item]]
+id = "v4-adapter-fetch"
+title = "Fetch v4's adapter from the cluster (the Mac work needn't wait for judging)"
+run = "scripts/q/v4-adapter-fetch.sh"
+est_min = 3
+when = "scripts/q/ready.sh v4adapter"
+
+[[item]]
 id = "v4-fetch"
 title = "Fetch v4 results and adapter from the cluster"
 run = "scripts/q/v4-fetch.sh"
@@ -15,7 +22,7 @@ id = "v4-mac-convert"
 title = "Build v4 MLX 8-bit on the Mac"
 run = "scripts/q/v4-mac-convert.sh"
 est_min = 75
-after = ["v4-fetch"]
+after = ["v4-adapter-fetch"]
 when = "scripts/q/ready.sh mac"
 
 [[item]]
@@ -33,6 +40,15 @@ run = "scripts/q/multisample-report.sh"
 est_min = 5
 after = ["v4-multisample"]
 when = "scripts/q/ready.sh mac"
+
+[[item]]
+id = "dpo-smoke"
+title = "DPO smoke test on the cluster (synthetic pairs, 2 steps; mechanics only)"
+run = "scripts/q/dpo-smoke.sh"
+est_min = 45
+after = ["v4-fetch"]          # after v4's judging: the cluster is free and run-4 is final
+when = "scripts/q/ready.sh cluster"
+window = true
 
 [[item]]
 id = "v5-candidates"

@@ -56,3 +56,13 @@ def test_daytime_window_works_too():
     assert at("2026-11-13 12:00", "window_open && echo y || echo n", **env) == "y"
     assert at("2026-11-13 18:00", "window_open && echo y || echo n", **env) == "n"
     assert hm("window_deadline", "2026-11-13 12:00", **env) == "Fri 16:50"
+
+
+def test_a_go_now_deadline_overrides_the_window():
+    # 2026-11-14 07:59: GO_NOW with an 8-hour hard stop. The window's own hard
+    # stop (07:40) has passed; need_minutes must use night-run's deadline, or it
+    # skips everything ("-19 min left", seen for real).
+    dl = "$(TZ=America/New_York date -d '2026-11-14 15:59' +%s)"
+    assert at("2026-11-14 07:59", f"export PLAN_DEADLINE={dl}; window_remaining_min") == "480"
+    assert at("2026-11-14 07:59", f"export PLAN_DEADLINE={dl}; need_minutes 100 x && echo fits") == "fits"
+    assert "skipping" in at("2026-11-14 07:59", "need_minutes 100 x")

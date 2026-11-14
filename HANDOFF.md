@@ -15,18 +15,22 @@ Rewrite this section whenever the state changes; history goes in
 - **Published:** v3 (adapter + MLX 8-bit) as `nkavassalis/lkml-reviewer-lora`.
   Never signs as Linus, beats base 51–24 blind, ties v2. README's journey
   table has v1–v5 in two lines each.
-- **Running:** v4 (patch-first layout). Training finished 2026-11-14 06:49
-  (eval loss 2.121 → 1.885 at step 639); its evaluation needs ~100 min and
-  runs at the start of the next window (20:00 ET 2026-11-14). The reporter
-  emails on problems, each morning and when `RESULTS-v4.md` lands (§4d); it
-  missed the first morning's report (fixed, `docs/LEARNINGS.md`).
-- **Queued after v4:** fetch, Mac build, multi-sample evaluation, v5 DPO data
-  (candidates, judge scores, reading pack), then a human check; after v5, a
-  greedy-decoding loop check (§4e). Runner: `scripts/queue-runner.sh status`.
-- **On the Mac:** v3 multi-sample done (200 patches × 3, both layouts); idle
-  until the queue builds v4.
-- **Not built yet:** chain support for `train/dpo_lora.py` (DPO smoke and
-  training items get added at the human gate).
+- **Running now (Nick, 2026-11-14: "start everything now, I am ok with some
+  day time downtime"):** v4's evaluation and judging on the cluster, GO_NOW
+  from 08:00 ET (hard stop 16:00; ~6 h); the multi-night v4 loop was stopped.
+  `RESULTS-v4.md` then triggers the FINISHED email and the queue. Training had
+  finished 06:49 (eval loss 2.121 → 1.885).
+- **Mac:** v4 MLX build (queue item `v4-mac-convert`), then v4 × 200 × 3, from
+  the adapter alone (`v4-adapter-fetch`), so the multi-sample report and v5's
+  starting model land this afternoon rather than Sunday.
+- **Cluster outside the window until 2026-11-15 07:40 ET:**
+  `data/queue/runner/open-until` lets window items run today (§4e). Next on
+  the cluster: `dpo-smoke`, then `v5-candidates`. Delete the file to stop that.
+- **DPO is wired up but unproven:** `TRAINER=dpo` in the chain, resume and flat
+  adapter saves in `dpo_lora.py`; the `dpo-smoke` item is its first real run.
+  Not yet queued: DPO training, v5 evaluation, the v5 Mac build.
+- **Published:** v3 as `nkavassalis/lkml-reviewer-lora` (beats base 51–24
+  blind, ties v2). The README journey table has v1–v5.
 
 ## 1. What lives where
 
@@ -134,6 +138,9 @@ a session cron job). The run-3 freeze is written up there.
 
 ## 4d. RUNNING UNATTENDED from 2026-11-13 (Nick away a couple of days)
 
+**2026-11-14:** the loop below was stopped after one night (training done);
+the rest of the plan runs GO_NOW from 08:00 ET (§0).
+
 **On the master node** (`~/linuspr-train`): a loop runs `night-run.sh` with
 `night-plan-v4.sh` for up to three nights (stops early once
 `RESULTS-v4.md` exists). Each night: smoke test of the whole v4 chain (once;
@@ -181,12 +188,19 @@ patch-first`). v3's as-trained data: `data/train/run-3b/`.
 5 min; `scripts/queue-runner.sh status|stop|start`; state and logs in
 `data/queue/`). Items, in order, each emailing Started / Done / FAILED:
 
+0. `v4-adapter-fetch` (added 2026-11-14): copies run-4's adapter as soon as it
+   exists, so the Mac items don't wait for the cluster's judging.
 1. `v4-fetch`: when `RESULTS-v4.md` exists and the cluster is idle, copy run-4's
    adapter, logs and judge files to `data/train/run-4/`.
-2. `v4-mac-convert`: when the Mac is idle, merge + MLX 8-bit into `~/lkml-mac/v4`
+2. `v4-mac-convert` (after `v4-adapter-fetch`): when the Mac is idle, merge + MLX 8-bit into `~/lkml-mac/v4`
    (frees disk by removing the stock mlx-community 8-bit model if < 90 GB free).
 3. `v4-multisample`: starts v4 × 200 patches × 3 samples on the Mac, detached.
-4. `v5-candidates` (window, after `multisample-report`): 800 training patches
+3b. `dpo-smoke` (window, after `v4-fetch`): deploys the training scripts to both
+   nodes (`deploy_train` in `scripts/q/lib.sh`: temp name + `mv`), then 16
+   synthetic pairs, 2 DPO steps from run-4, a checkpoint, evaluation of the
+   result (`data/cluster/night-plan-dpo-smoke.sh`). Mechanics only.
+4. `v5-candidates` (window, after `multisample-report`; deploys `compare.py`
+   first: the cluster's copy predated `--samples`): 800 training patches
    (seeded, `data/v5/in/`), 4 samples each from v5's starting model
    (`data/v5/BASE`: v4 unless the report shows v4 clearly worse than v3
    patch-first; PLAN-v5 "Which model v5 starts from"), two chunks of 100 per round (one per node), via a GO_NOW
@@ -202,9 +216,9 @@ patch-first`). v3's as-trained data: `data/train/run-3b/`.
    `data/v5/pairs.jsonl`. Throughput unmeasured: expect 1–3 nights.
 7. `v5-check-pack`: `data/v5/CHECK.md`, 20 pairs to read, emailed.
 8. `v5-human-check` (**human gate**, emails "Needs you"): read the pack; approve
-   with `python3 train/workqueue.py approve v5-human-check`. Then add the DPO
-   smoke, DPO training and v5 eval items (they need chain support for
-   `dpo_lora.py`, not written yet).
+   with `python3 train/workqueue.py approve v5-human-check`. DPO training, v5
+   evaluation and the v5 Mac build are not queued yet; the chain supports DPO
+   (`TRAINER=dpo SFT_ADAPTER=<from data/v5/BASE> PAIRS=v5/pairs.jsonl`).
 
 9. `greedy-loops` + `greedy-loops-report` (Nick, 2026-11-13: "measure after
    v5"): greedy decoding (`compare_mlx.py --greedy`, no repetition penalty) for
@@ -213,6 +227,10 @@ patch-first`). v3's as-trained data: `data/train/run-3b/`.
    Waits for `~/lkml-mac/v5/mlx-8bit`: **the v5 convert item must build there.**
 
 When v4's and v5's results land, update their rows in README's "The journey so far" table (Nick wants the learning documented front and centre).
+
+**Outside the window:** `echo "2026-11-15 07:40 EST" > data/queue/runner/open-until`
+lets window items start until then (Nick allowed daytime downtime on
+2026-11-14 only; ask again for another day).
 
 A failed item halts the queue (`workqueue.py reset ID` to retry, `skip ID`).
 Tested: the v5 data path end to end against a fake judge (chunking, merge,
@@ -226,9 +244,14 @@ Not tested against the real cluster: `v5-candidates`' plan and the Mac items.
    go"). The queue carries on by itself.
 2. When the multi-sample report arrives: is v4 better than v3 patch-first
    beyond the noise floor? That answers whether v4's training bought anything
-   over reordering at inference.
-3. Before the v5 human gate opens: write chain support for `dpo_lora.py` and a
-   DPO smoke test, so approval can go straight to training.
+   over reordering at inference, and sets `data/v5/BASE`.
+3. If `dpo-smoke` passes: queue DPO training (`run-5`, `--resume-auto`), v5
+   evaluation against v4 on the same 100 patches, and the v5 Mac build to
+   `~/lkml-mac/v5/mlx-8bit` (the greedy check waits for that path), all after
+   `v5-human-check`. If it fails, fix it before the human gate opens.
+4. The training-time samples in `train.log` are greedy (`sft_lora.py
+   samples()`, `do_sample=False`) and loop; switch them to the shipped
+   decoding so they're worth reading.
 
 ## 6. Not verified (do not present as done)
 

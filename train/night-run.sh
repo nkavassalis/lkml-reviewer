@@ -69,6 +69,7 @@ else
   say "window open; hard stop at $(TZ=$WINDOW_TZ date -d @"$deadline" '+%F %T'); running $PLAN"
 fi
 
+export PLAN_DEADLINE=$deadline   # need_minutes in the plan uses this (window-lib.sh)
 setsid bash "$PLAN" >> "$LOG" 2>&1 &
 plan_pid=$!
 while kill -0 "$plan_pid" 2>/dev/null; do

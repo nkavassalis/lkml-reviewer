@@ -130,3 +130,36 @@ def test_exit_75_means_resume_later_not_failure(tmp_path):
         assert st["status"] == expected
     assert st["passes"] == 3
     assert nxt(env).strip() == "RUN b"                  # never halted the queue
+
+
+def test_open_until_lets_window_items_run_outside_the_window(tmp_path):
+    """The owner allowed daytime downtime: STATE_DIR/open-until opens the
+    window until that time, and window items are sized to it."""
+    env = setup(tmp_path, '''
+[[item]]
+id = "w"
+title = "cluster job"
+run = "echo left=$WINDOW_MINUTES_LEFT"
+est_min = 60
+window = true
+''')
+    state = tmp_path / "runner"
+    env |= {"NOTIFY_CMD": "true", "QUEUE_RUNNER_STATE": str(state), "NOTIFY_LOG_DIR": str(tmp_path),
+            "WINDOW_TZ": "America/New_York", "WINDOW_START": "20:00", "WINDOW_END": "08:00",
+            "WINDOW_NOW": subprocess.run(["bash", "-c", "TZ=America/New_York date -d '2026-11-14 12:00' +%s"],
+                                         capture_output=True, text=True).stdout.strip()}
+    runner = ROOT / "scripts" / "queue-runner.sh"
+    log = tmp_path / "logs" / "w.log"
+
+    def once():
+        subprocess.run(["bash", str(runner), "once"], env=env, capture_output=True, text=True)
+
+    once()                                              # noon, window shut: nothing runs
+    assert not log.exists()
+    state.mkdir(exist_ok=True)
+    (state / "open-until").write_text("2026-11-14 11:00 EST\n")
+    once()                                              # expired: still nothing
+    assert not log.exists()
+    (state / "open-until").write_text("2026-11-14 15:00 EST\n")
+    once()
+    assert "left=180" in log.read_text()
