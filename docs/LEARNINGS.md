@@ -344,3 +344,16 @@ non-zero when verdicts fail and retries them on a rerun. Tests:
 **Generalizes:** yes: template OPERATIONS.md rule 1, with the same code and
 tests. A health check must outlast the thing's startup time, and a step built
 on zero results has failed, whatever its exit code.
+
+## 2026-11-15: DPO's memory isn't SFT's memory
+
+**Believed:** a trainer that fit for SFT at 4,096 tokens would fit for DPO.
+**Evidence:** with the DDP bug fixed, the smoke test ran out of memory in the
+policy forward pass (92 GB in use, 91 GB allowed). DPO runs chosen and rejected
+together, and `batch_logprobs` built full-vocabulary logits for every
+position, prompt included, then used only the response rows.
+**Changed:** `logits_to_keep` computes logits only from the earliest
+response onwards. Checked on the cluster against the full computation with a
+toy causal model (exact match, including a response starting at position 1).
+**Generalizes:** partly: the template has no DPO trainer yet. When it gets one,
+size memory from DPO's own smoke test (two sequences per step), not from SFT's.

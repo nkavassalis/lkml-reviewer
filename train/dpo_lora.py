@@ -40,7 +40,8 @@ from transformers import AutoModelForImageTextToText, AutoTokenizer  # noqa: E40
 DISTRIBUTED = WORLD > 1
 
 
-def batch_logprobs(model, seqs: list[tuple[torch.Tensor, torch.Tensor]], pad_id: int) -> torch.Tensor:
+def batch_logprobs(model, seqs: list[tuple[torch.Tensor, torch.Tensor]], pad_id: int,
+                   device: str = "cuda") -> torch.Tensor:
     """Summed response log-probs for each (ids, labels) in one padded forward."""
     T = max(len(i) for i, _ in seqs)
     ids = torch.full((len(seqs), T), pad_id, dtype=torch.long)
@@ -48,9 +49,13 @@ def batch_logprobs(model, seqs: list[tuple[torch.Tensor, torch.Tensor]], pad_id:
     att = torch.zeros((len(seqs), T), dtype=torch.long)
     for r, (i, lb) in enumerate(seqs):
         ids[r, : len(i)], lab[r, : len(lb)], att[r, : len(i)] = i, lb, 1
-    ids, lab, att = ids.cuda(), lab.cuda(), att.cuda()
-    logits = model(input_ids=ids, attention_mask=att).logits[:, :-1]
-    tgt = lab[:, 1:]
+    ids, lab, att = ids.to(device), lab.to(device), att.to(device)
+    # Logits only from the earliest response onwards: full-vocabulary logits for
+    # the prompt too (2 x 4,096 positions) ran the 2-node smoke test out of
+    # memory (2026-11-15). Position p predicts token p + 1, so keep p >= p0.
+    p0 = max(int((lab != -100).float().argmax(1).min()) - 1, 0)
+    logits = model(input_ids=ids, attention_mask=att, logits_to_keep=T - p0).logits[:, :-1]
+    tgt = lab[:, p0 + 1:]
     mask = tgt != -100
     out = []
     for r in range(len(seqs)):                      # log_softmax only on response rows
