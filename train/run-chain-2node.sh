@@ -57,6 +57,7 @@ PORT=29511  # not the serving stack's port
 say() { echo "[$(date +%T)] $*" >> "$LOG"; }
 peer() { ssh -o BatchMode=yes "$PEER" "$@"; }
 
+TRAINERS="sft_lora.py|dpo_lora.py|compare.py"
 restore() {
   local status=$?
   say "restoring $SERVE_CTR on both nodes (exit status $status)"
@@ -66,7 +67,15 @@ restore() {
   # Quoted as ONE remote command string: ssh re-parses it, and a bare | in the
   # pattern became a shell pipe on the peer ("compare.py: command not found").
   peer "docker exec $TRAIN_CTR pkill -f 'sft_lora.py|dpo_lora.py|compare.py'" >> "$LOG" 2>&1 || true
-  sleep 5
+  # Wait for the killed trainers to exit and free their GPU memory: vLLM checks
+  # free memory at startup and refused to start 6 s after a crashed run
+  # (lkml-reviewer, 2026-11-15).
+  for _ in $(seq 36); do
+    docker exec "$TRAIN_CTR" pgrep -f "$TRAINERS" > /dev/null 2>&1 \
+      || peer "docker exec $TRAIN_CTR pgrep -f '$TRAINERS'" > /dev/null 2>&1 || break
+    sleep 5
+  done
+  sleep "${RESTORE_SETTLE_SEC:-10}"
   docker start "$SERVE_CTR" >> "$LOG" 2>&1
   peer docker start "$SERVE_CTR" >> "$LOG" 2>&1
   say "start issued on both nodes"

@@ -14,12 +14,14 @@ def run_chain(tmp: Path, **env) -> tuple[int, list[str], str]:
     bin_.mkdir(exist_ok=True)
     calls = tmp / "calls.log"
     for tool in ("docker", "ssh", "scp"):
-        (bin_ / tool).write_text(f'#!/bin/bash\necho "{tool} $*" >> {calls}\n')
+        # pgrep finds no leftover trainers, so restore doesn't wait
+        (bin_ / tool).write_text(f'#!/bin/bash\necho "{tool} $*" >> {calls}\n'
+                                 'case "$*" in *pgrep*) exit 1;; esac\n')
         (bin_ / tool).chmod(0o755)
     work = tmp / "work"
     work.mkdir(exist_ok=True)
     e = {**os.environ, "PATH": f"{bin_}:{os.environ['PATH']}", "WORK": str(work), "RUN": "run-5",
-         "PEER": "peer", "MASTER_ADDR": "192.0.2.1", "IFACE": "eth9", **env}
+         "PEER": "peer", "MASTER_ADDR": "192.0.2.1", "IFACE": "eth9", "RESTORE_SETTLE_SEC": "0", **env}
     p = subprocess.run(["bash", str(CHAIN)], env=e, capture_output=True, text=True)
     log = (work / "chain-run-5.log").read_text() if (work / "chain-run-5.log").exists() else ""
     return p.returncode, calls.read_text().splitlines() if calls.exists() else [], log
@@ -73,3 +75,12 @@ def test_peer_copies_reclaim_root_owned_directories_first(tmp_path):
 def test_sft_data_files_can_be_chosen(tmp_path):
     rc, calls, _ = run_chain(tmp_path, TRAIN_DATA="rev/sft.jsonl", EVAL_DATA="sft_eval.jsonl")
     assert rc == 0 and all("--train rev/sft.jsonl --eval sft_eval.jsonl" in c for c in calls if "torchrun" in c)
+
+
+def test_restore_checks_the_trainers_are_gone_before_starting_serving(tmp_path):
+    # vLLM checks free GPU memory at startup; started 6 s after a crashed run it
+    # refused and stayed down for 7 hours (lkml-reviewer, 2026-11-15).
+    _, calls, _ = run_chain(tmp_path)
+    pgrep = next(i for i, c in enumerate(calls) if "pgrep" in c)
+    start = next(i for i, c in enumerate(calls) if c.startswith("docker start"))
+    assert pgrep < start

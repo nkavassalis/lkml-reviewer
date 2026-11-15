@@ -37,18 +37,6 @@ fi
 ln -sf "$(basename "$LOG")" "$LOGDIR/latest-run.log"
 say() { echo "[$(TZ=$WINDOW_TZ date '+%F %T')] $*" >> "$LOG"; }
 
-ensure_serving() {
-  for host in local $PEER; do
-    if [ "$host" = local ]; then
-      running=$(docker inspect -f '{{.State.Running}}' "$SERVE_CTR" 2>/dev/null)
-      [ "$running" = true ] || { docker start "$SERVE_CTR" >> "$LOG" 2>&1; say "safety net: started $SERVE_CTR locally"; }
-    else
-      running=$(ssh -o BatchMode=yes "$host" "docker inspect -f '{{.State.Running}}' $SERVE_CTR" 2>/dev/null)
-      [ "$running" = true ] || { ssh -o BatchMode=yes "$host" docker start "$SERVE_CTR" >> "$LOG" 2>&1; say "safety net: started $SERVE_CTR on $host"; }
-    fi
-  done
-}
-
 # WAIT_FOR_NEXT_WINDOW=1: don't use a window that is already open (launching
 # in the morning for tonight would otherwise start at once, with minutes left).
 if [ "${WAIT_FOR_NEXT_WINDOW:-0}" = 1 ]; then opens=$(window_next_start); else opens=$(window_next_open)
@@ -84,5 +72,5 @@ while kill -0 "$plan_pid" 2>/dev/null; do
 done
 wait "$plan_pid" 2>/dev/null; say "plan finished (exit status $?)"
 sleep 10
-ensure_serving
-say "night done; serving confirmed on all nodes"
+if ensure_serving; then say "night done; serving confirmed on all nodes"
+else say "night done; FAILED: $SERVE_CTR is not serving after two tries (docker logs $SERVE_CTR)"; fi

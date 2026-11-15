@@ -11,6 +11,14 @@ Use it as the default for future projects of this kind.
    (`train/run-chain.sh`, `train/run-chain-2node.sh`). Before restoring, kill
    leftover workers. A data-parallel rank whose partner died otherwise sits out
    the NCCL timeout holding its GPU, and the service can't start on that node.
+   Then **wait for them to exit**: killed trainers take seconds to free GPU
+   memory, and vLLM checks free memory at startup. And **confirm serving, not
+   running**: `ensure_serving` (`train/window-lib.sh`) waits longer than a
+   model load, then checks every node's container is still up (and
+   `SERVE_HEALTH_URL`, if set), retries once, and logs FAILED otherwise.
+   lkml-reviewer, 2026-11-15: restored 6 s after a crashed run, vLLM refused
+   to start on the peer, "serving confirmed" was logged 10 s after `docker
+   start`, and the server was down for 7 hours.
 2. **Make memory exhaustion a process error, never a machine freeze.** On
    unified-memory machines (GB10 / DGX Spark, Apple silicon) the GPU allocator
    draws from system RAM. Cap it (`--mem-fraction`, ~75%) and reduce

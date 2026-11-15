@@ -98,7 +98,7 @@ def cmd_score(args) -> None:
     arms = args.arms.split(",")
     done = set()
     if Path(args.out).exists():
-        done = {(r["eval_index"], r["key"]) for r in read_jsonl(args.out)}
+        done = {(r["eval_index"], r["key"]) for r in read_jsonl(args.out) if r.get("score") is not None}
     jobs = [(r, a) for r in rows for a in arms if a in r and (r["eval_index"], a) not in done]
     print(f"{len(jobs)} reviews to score with {SOURCE} ({len(done)} already done)", flush=True)
 
@@ -106,12 +106,20 @@ def cmd_score(args) -> None:
         r, a = job
         return {"eval_index": r["eval_index"], "key": a, **ask(r["input"], r["reference"], r[a])}
 
+    failed = 0
     with ThreadPoolExecutor(max_workers=args.workers) as pool, open(args.out, "a") as out:
         for n, res in enumerate(pool.map(one, jobs), 1):
+            if res.get("score") is None:
+                failed += 1
+                continue                   # not written, so a rerun retries it
             out.write(json.dumps(res) + "\n")
             out.flush()
             if n % 20 == 0:
-                print(f"  {n}/{len(jobs)} scored", flush=True)
+                print(f"  {n}/{len(jobs)} done, {failed} failed", flush=True)
+    if failed:
+        # A judge that's down fails every call in seconds; a report built on
+        # zero verdicts once went out as "done" (lkml-reviewer, 2026-11-15).
+        sys.exit(f"{failed}/{len(jobs)} verdicts failed (judge unreachable or unparseable); rerun to retry them")
 
 
 def paired(scores: list[dict], a: str, b: str) -> dict:

@@ -66,3 +66,33 @@ need_minutes() {
   echo "[$(TZ=$WINDOW_TZ date +%T)] skipping $2: needs ~$1 min, $left left before the window's hard stop"
   return 1
 }
+
+# --- Serving: running isn't serving ------------------------------------------
+# vLLM can start, load weights for minutes, then exit. lkml-reviewer,
+# 2026-11-15: a crashed trainer still held the peer's GPU memory, vLLM refused
+# to start there, and "serving confirmed" had already been logged 10 s after
+# `docker start`; the server was down 7 hours. So ensure_serving starts what
+# isn't running, waits SERVE_SETTLE_SEC (default 420, longer than a model
+# load), then requires every node's container still up and, if set,
+# SERVE_HEALTH_URL answering. One retry restarts every node (tensor-parallel
+# ranks fail together). Returns 1 if serving still isn't up. Needs SERVE_CTR,
+# PEER (may be empty), say().
+_serve_ssh() { if [ "$1" = local ]; then shift; "$@"; else local h=$1; shift; ssh -o BatchMode=yes "$h" "$*"; fi; }
+serve_running() { [ "$(_serve_ssh "$1" docker inspect -f '{{.State.Running}}' "$SERVE_CTR" 2>/dev/null)" = true ]; }
+ensure_serving() {
+  local host try ok
+  for try in 1 2; do
+    for host in local $PEER; do
+      if [ "$try" = 2 ]; then _serve_ssh "$host" docker restart "$SERVE_CTR" > /dev/null 2>&1
+      elif ! serve_running "$host"; then _serve_ssh "$host" docker start "$SERVE_CTR" > /dev/null 2>&1
+        say "safety net: started $SERVE_CTR on $host"; fi
+    done
+    sleep "${SERVE_SETTLE_SEC:-420}"
+    ok=1
+    for host in local $PEER; do serve_running "$host" || ok=0; done
+    if [ "$ok" = 1 ] && [ -n "${SERVE_HEALTH_URL:-}" ]; then curl -fsS -m 20 "$SERVE_HEALTH_URL" > /dev/null 2>&1 || ok=0; fi
+    [ "$ok" = 1 ] && return 0
+    say "$SERVE_CTR did not stay up (try $try of 2); see: docker logs $SERVE_CTR"
+  done
+  return 1
+}

@@ -324,3 +324,23 @@ just been wrapped in DDP. A single-GPU run never wraps, so it would have passed.
 `tests/test_dpo_ddp.py` fails on any PEFT call on the wrapped model.
 **Generalizes:** yes: template OPERATIONS.md launch checklist: smoke test on as
 many nodes as the real run.
+
+## 2026-11-15: "Serving confirmed" meant "container started"
+
+**Believed:** the night runner's safety net confirmed serving was back.
+**Evidence:** after the DPO smoke crashed at 03:19, the chain restarted vLLM
+6 s later. The peer's GPU memory wasn't free yet ("53.95/121.69 GiB free ...
+less than desired 102.22 GiB"), so vLLM exited 2.5 min later on both nodes. The
+safety net had already logged "serving confirmed" after checking only that the
+containers were running, 10 s in. vLLM was down for 7 hours. Nobody was
+told. The next consumer, the thinking test's judge, failed all 60 calls in
+2 s, and `rubric.py` exited 0, so its report went out as "done" with nothing
+scored.
+**Changed:** the chain's restore waits until no trainer is left on either node;
+`ensure_serving` waits past a model load, requires every node still up,
+retries once, and logs FAILED (the reporter emails it); `rubric.py` exits
+non-zero when verdicts fail and retries them on a rerun. Tests:
+`test_serving.py`, `test_chain.py`, `test_rubric.py`.
+**Generalizes:** yes: template OPERATIONS.md rule 1, with the same code and
+tests. A health check must outlast the thing's startup time, and a step built
+on zero results has failed, whatever its exit code.
