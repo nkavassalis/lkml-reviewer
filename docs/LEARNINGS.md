@@ -311,3 +311,16 @@ selection changes" and "a model falls short on a metric".
 **Generalizes:** yes: the same in the template (score.py, docs_check,
 PLAN-template, AGENTS.md, METHOD.md section 4 "Diagnose the data before the
 model").
+
+## 2026-11-15: The DPO trainer only broke on two nodes
+
+**Believed:** the DPO trainer was ready once its loss math was tested and the
+code read before its first run.
+**Evidence:** the 2-node smoke test (2 steps, synthetic pairs) failed after
+loading the model: `'DistributedDataParallel' object has no attribute
+'set_adapter'`. The adapter switch called PEFT's method on `model`, which had
+just been wrapped in DDP. A single-GPU run never wraps, so it would have passed.
+**Changed:** the switch and every PEFT call use the unwrapped `core`;
+`tests/test_dpo_ddp.py` fails on any PEFT call on the wrapped model.
+**Generalizes:** yes: template OPERATIONS.md launch checklist: smoke test on as
+many nodes as the real run.

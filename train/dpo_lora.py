@@ -116,16 +116,17 @@ def main() -> None:
     # The policy starts as a copy of the SFT adapter, or where the last run stopped.
     model.load_adapter(str(resume_dir or args.sft_adapter), adapter_name="policy", is_trainable=True)
 
+    core = model                                   # unwrapped: DDP doesn't pass set_adapter through
+
     def use(name: str) -> None:
-        model.set_adapter(name)
-        for n, p in model.named_parameters():      # set_adapter may re-enable grads; pin them
+        core.set_adapter(name)
+        for n, p in core.named_parameters():      # set_adapter may re-enable grads; pin them
             if "lora_" in n:
                 p.requires_grad = ".policy." in n
 
     use("policy")
     params = [p for p in model.parameters() if p.requires_grad]
     log(fh, f"trainable params {sum(p.numel() for p in params) / 1e6:.1f}M (policy adapter only)")
-    core = model
     if DISTRIBUTED:
         model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[0])
     opt = torch.optim.AdamW(params, lr=args.lr, weight_decay=0.0, betas=(0.9, 0.99))
