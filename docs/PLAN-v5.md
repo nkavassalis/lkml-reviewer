@@ -118,6 +118,12 @@ addresses, no loops). **Not the fix if** the rubric is level or lower.
 makes more false claims (the false-claims line), or (3) fewer updates simply
 undertrain it (held-out loss and style metrics vs v3's).
 
+**Judge audit (2026-11-15):** Nick read the 10-item pack
+(`train/judge_audit.py`; half the verdicts reporting false claims, half
+not) and agreed with every verdict: "I agree with the Judge's verdicts." The
+rubric judge stands as v5's yardstick, for the decision and for ranking
+candidates.
+
 ## Costs (estimates; measured numbers in brackets)
 
 | step | work | time |
