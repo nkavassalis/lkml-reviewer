@@ -357,3 +357,21 @@ response onwards. Checked on the cluster against the full computation with a
 toy causal model (exact match, including a response starting at position 1).
 **Generalizes:** partly: the template has no DPO trainer yet. When it gets one,
 size memory from DPO's own smoke test (two sequences per step), not from SFT's.
+
+## 2026-11-15: The DPO out-of-memory wasn't the logits
+
+**Believed:** (entry above) full-vocabulary logits ran the DPO smoke test out
+of memory.
+**Evidence:** with logits only for response positions, it failed at the same
+place with identical numbers (90.57 GB allocated). The trainer never called
+`model.train()`. `from_pretrained` returns eval mode, and HF's gradient
+checkpointing does nothing in eval mode, so every layer's activations were
+kept for both sequences. `sft_lora.py` calls `train()`; the DPO trainer,
+written from it, didn't.
+**Changed:** `core.train()` before the loop, and dropout off (TRL's DPO
+default: the reference pass must be deterministic). `test_dpo_ddp.py` checks
+that `train()` is called. The logits change stays (it's correct and smaller).
+**Generalizes:** yes: template OPERATIONS.md launch checklist: a trainer must
+call `train()`; checkpointing is silently off without it. And a fix for a
+resource failure isn't confirmed until the number moves: identical memory
+figures meant the first diagnosis was wrong.

@@ -7,26 +7,31 @@ design doc; this file is "where the work actually stopped". Results are in
 
 ---
 
-## 0. Status (2026-11-14)
+## 0. Status (2026-11-15)
 
 Rewrite this section whenever the state changes; history goes in
 `docs/LEARNINGS.md` and `docs/REPORT.md`, not here.
 
-- **v4 is done and changed nothing** (REPORT §5c): v4 = v3 on 200 patches x 3
-  samples; both ~2/10 on v5's rubric. Cause: only 33% of training replies are
-  about the patch. The layout probe didn't replicate.
-- **Running now:** the review-only test (`rev-train`, cluster, GO_NOW from
-  16:29 ET): v3's recipe on the 1,718 patch-engaging pairs, then the same 100
-  held-out patches; `rev-report` scores it with v5's rubric and checks the
-  criteria in PLAN-v5 ('Decision: is "review-only" data the fix?'), emailed.
-- **Mac:** the thinking test (base with vs without reasoning, 30 patches),
-  started by hand; `think-report` scores it after `rev-report`.
-- **Waiting on Nick:** the judge audit pack (`data/judge-audit/AUDIT.md`,
-  emailed). `v5-base-decision` is parked (waiting-human; data/v5/BASE = v3);
-  the DPO pilot and candidates wait for the review-only result.
+- **The review-only test is done** (REPORT §5d): rubric 2.54 vs v3's 2.04, the
+  first real gain since v2, but false claims rose (1.54 vs 1.10). **Nick chose
+  it as v5's starting model** (`data/v5/BASE` = rev; PLAN-v5).
+- **The judge is validated:** Nick agreed with all 10 audit verdicts.
+- **Queue:** `dpo-smoke` (the DPO trainer's first 2-node run; three bugs
+  fixed today: DDP hid `set_adapter`; no `train()`, so no gradient
+  checkpointing and OOM; logits for the prompt too) -> the v5 pilot
+  (`v5-pilot-candidates`/`-score`/`-report`: 50 review-only patches x 4, pair
+  yield) -> `v5-settings` (human gate: Nick sets N and gap in
+  `data/v5/SETTINGS`) -> the full candidates, scoring, check pack, human check.
+  The DPO training items still need adding after the human check, starting
+  from `rev/adapter-final`.
+- **The thinking test has no result:** the judge was down when it scored (0/60),
+  and 28/30 reasoning runs hit the token limit before writing a review. It
+  needs a far larger budget; Nick hasn't asked for a rerun.
+- **vLLM was down 03:21-10:43 UTC** after a crashed run (restored too soon;
+  "serving confirmed" checked only that the container ran). Fixed: the restore
+  waits for trainers to exit; `ensure_serving` checks serving after a model load.
 - **Cluster outside the window until 2026-11-15 07:40 ET**
-  (`data/queue/runner/open-until`). `dpo-smoke` failed once (root-owned peer
-  dir; fixed) and retries after the review-only steps.
+  (`data/queue/runner/open-until`); after that, window items wait for 20:00 ET.
 - **Published:** v3 as `nkavassalis/lkml-reviewer-lora`.
 
 ## 1. What lives where

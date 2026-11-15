@@ -85,17 +85,51 @@ window = true
 
 [[item]]
 id = "v5-base-decision"
-title = "Decide v5's starting model: v3 or v4 (multi-sample report + blind judge)"
+title = "Decide v5's starting model (Nick, 2026-11-15: the review-only model, rev)"
 run = "true"
 after = ["v4-fetch", "multisample-report"]
 gate = "human"     # 2026-11-14: the judge preferred v3 45-28; choose_base.py can't see correctness
 
+# Nick, 2026-11-14: "Pilot first": 50 patches x 4 reviews, measure the real pair
+# yield, then choose the full run's settings.
+[[item]]
+id = "v5-pilot-candidates"
+title = "v5 pilot: 4 reviews per patch for 50 review-only training patches (cluster)"
+run = "V5_SET=pilot V5_N=50 V5_CHUNKS=2 scripts/q/v5-candidates.sh"
+est_min = 80
+after = ["v5-base-decision", "dpo-smoke"]
+when = "scripts/q/ready.sh cluster"
+window = true
+
+[[item]]
+id = "v5-pilot-score"
+title = "v5 pilot: the judge scores the 200 candidates"
+run = "V5_SET=pilot V5_CHUNKS=2 scripts/q/v5-score.sh"
+est_min = 60
+after = ["v5-pilot-candidates"]
+when = "scripts/q/ready.sh cluster"
+window = true
+
+[[item]]
+id = "v5-pilot-report"
+title = "v5 pilot report: pair yield at gaps 2/3/4, projected to the full run"
+run = "scripts/q/v5-pilot-report.sh"
+est_min = 2
+after = ["v5-pilot-score"]
+
+[[item]]
+id = "v5-settings"
+title = "Choose the full run's N and gap from the pilot (data/v5/SETTINGS)"
+run = "true"
+after = ["v5-pilot-report"]
+gate = "human"
+
 [[item]]
 id = "v5-candidates"
-title = "v5: generate 4 reviews per patch for 800 training patches (cluster)"
+title = "v5: generate 4 reviews per patch for N review-only training patches (cluster; N from data/v5/SETTINGS)"
 run = "scripts/q/v5-candidates.sh"
 est_min = 280          # one round of two chunks; resumes across windows (exit 75)
-after = ["v4-fetch", "multisample-report", "v5-base-decision"]   # data/v5/BASE, confirmed by a person
+after = ["v5-settings"]   # data/v5/BASE = rev (Nick), N and gap from the pilot
 when = "scripts/q/ready.sh cluster"
 window = true
 

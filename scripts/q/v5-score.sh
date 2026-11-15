@@ -3,13 +3,16 @@
 # (make_preferences.py score, resumable), then pairs best vs worst per patch.
 # Runs against the cluster's vLLM inside the window; exits 75 if cut off.
 . "$(dirname "$0")/lib.sh"
-d="$QROOT/data/v5"
+# Full run: the N and gap Nick chose after the pilot (data/v5/SETTINGS).
+[ "${V5_SET:-full}" = full ] && [ -f "$QROOT/data/v5/SETTINGS" ] && . "$QROOT/data/v5/SETTINGS"
+# V5_SET=pilot V5_CHUNKS=2 for the pilot; default the full set (8 chunks).
+d="$QROOT/data/v5/${V5_SET:-full}"; chunks=${V5_CHUNKS:-8}
 # One candidates file; eval_index renumbered so it is unique across chunks.
-python3 - "$d" <<'PY'
+python3 - "$d" "$chunks" <<'PY'
 import json, sys
 d = sys.argv[1]
 with open(f"{d}/cands.jsonl", "w") as out:
-    for c in range(8):
+    for c in range(int(sys.argv[2])):
         for line in open(f"{d}/out/out-{c}.jsonl"):
             r = json.loads(line); r["eval_index"] += 100 * c
             out.write(json.dumps(r) + "\n")
@@ -30,4 +33,4 @@ ok = sum(1 for x in s if x.get("score") is not None)
 print(f"scored {ok} of {n} candidates ({len(s) - ok} judge failures)")
 sys.exit(0 if len(s) >= n else 1)
 PY
-python3 "$QROOT/train/make_preferences.py" pairs "$d/cands.jsonl" "$d/scores.jsonl" --min-gap 3 --out "$d/pairs.jsonl"
+python3 "$QROOT/train/make_preferences.py" pairs "$d/cands.jsonl" "$d/scores.jsonl" --min-gap ${V5_GAP:-3} --out "$d/pairs.jsonl"

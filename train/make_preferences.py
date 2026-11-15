@@ -18,6 +18,7 @@ import argparse
 import json
 import os
 import re
+import sys
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -70,6 +71,14 @@ def ask(patch: str, reference: str, candidate: str) -> dict:
         return {"score": None, "error": type(e).__name__}
 
 
+# The judge being unreachable, unlike an unparseable verdict (temperature 0, so
+# it would repeat): not recorded, retried by a rerun, and it fails the step.
+# A dead judge once failed 60 of 60 calls in 2 s and the report said "done"
+# (lkml-reviewer, 2026-11-15).
+TRANSIENT = {"URLError", "HTTPError", "TimeoutError", "timeout", "ConnectionError",
+             "ConnectionRefusedError", "ConnectionResetError", "RemoteDisconnected"}
+
+
 def candidates(row: dict, arm: str) -> list[tuple[str, str]]:
     keys = sorted(k for k in row if re.fullmatch(rf"{re.escape(arm)}_sampled_s\d+", k))
     return [(k, row[k]) for k in keys]
@@ -81,7 +90,7 @@ def cmd_score(args) -> None:
     done = set()
     if Path(args.out).exists():
         with open(args.out) as f:
-            done = {(r["eval_index"], r["key"]) for r in map(json.loads, f)}
+            done = {(r["eval_index"], r["key"]) for r in map(json.loads, f) if r.get("error") not in TRANSIENT}
     jobs = [(r, k, t) for r in rows for k, t in candidates(r, args.arm) if (r["eval_index"], k) not in done]
     print(f"{len(jobs)} candidates to score ({len(done)} already done)", flush=True)
 
@@ -89,12 +98,18 @@ def cmd_score(args) -> None:
         r, k, t = job
         return {"eval_index": r["eval_index"], "key": k, **ask(r["input"], r["reference"], t)}
 
+    failed = 0
     with ThreadPoolExecutor(max_workers=args.workers) as pool, open(args.out, "a") as out:
         for n, res in enumerate(pool.map(one, jobs), 1):
+            if res.get("error") in TRANSIENT:
+                failed += 1
+                continue
             out.write(json.dumps(res) + "\n")
             out.flush()
             if n % 20 == 0:
-                print(f"  {n}/{len(jobs)} scored", flush=True)
+                print(f"  {n}/{len(jobs)} scored, {failed} failed", flush=True)
+    if failed:
+        sys.exit(f"{failed}/{len(jobs)} verdicts failed: judge unreachable; rerun to retry them")
 
 
 def cmd_pairs(args) -> None:

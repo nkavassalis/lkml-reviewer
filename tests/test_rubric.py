@@ -90,8 +90,17 @@ def test_a_dead_judge_fails_the_step_and_a_rerun_retries(tmp_path, monkeypatch):
     monkeypatch.setattr(rubric, "ask", lambda *a: {"score": None, "error": "URLError"})
     with pytest.raises(SystemExit) as e:
         rubric.main(["score", str(cmp), "--arms", "v3_sampled,v4_sampled", "--out", str(out)])
-    assert "60/60 verdicts failed" in str(e.value)
+    assert "60/60 verdicts failed: judge unreachable" in str(e.value)
     monkeypatch.setattr(rubric, "ask", fake_ask)
     rubric.main(["score", str(cmp), "--arms", "v3_sampled,v4_sampled", "--out", str(out)])
     scored = [x for x in map(json.loads, out.read_text().splitlines()) if x.get("score") is not None]
     assert len(scored) == 60                                             # the old failure was retried
+
+
+def test_an_unparseable_verdict_is_recorded_not_retried(tmp_path, monkeypatch):
+    cmp, out = compare_file(tmp_path), tmp_path / "scores.jsonl"
+    monkeypatch.setattr(rubric, "ask", lambda *a: {"score": None, "error": "IndexError"})
+    rubric.main(["score", str(cmp), "--arms", "v3_sampled,v4_sampled", "--out", str(out)])   # no exit
+    assert len(out.read_text().splitlines()) == 60
+    rubric.main(["score", str(cmp), "--arms", "v3_sampled,v4_sampled", "--out", str(out)])
+    assert len(out.read_text().splitlines()) == 60                       # not retried

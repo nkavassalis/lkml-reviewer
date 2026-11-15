@@ -88,6 +88,14 @@ except ImportError:
     SOURCE = "rubric.py's copy"
 
 
+# The judge being unreachable, unlike an unparseable verdict (temperature 0, so
+# it would repeat): not recorded, retried by a rerun, and it fails the step.
+# A dead judge once failed 60 of 60 calls in 2 s and the report said "done"
+# (lkml-reviewer, 2026-11-15).
+TRANSIENT = {"URLError", "HTTPError", "TimeoutError", "timeout", "ConnectionError",
+             "ConnectionRefusedError", "ConnectionResetError", "RemoteDisconnected"}
+
+
 def read_jsonl(path: str) -> list[dict]:
     with open(path) as f:
         return [json.loads(x) for x in f if x.strip()]
@@ -98,7 +106,7 @@ def cmd_score(args) -> None:
     arms = args.arms.split(",")
     done = set()
     if Path(args.out).exists():
-        done = {(r["eval_index"], r["key"]) for r in read_jsonl(args.out) if r.get("score") is not None}
+        done = {(r["eval_index"], r["key"]) for r in read_jsonl(args.out) if r.get("error") not in TRANSIENT}
     jobs = [(r, a) for r in rows for a in arms if a in r and (r["eval_index"], a) not in done]
     print(f"{len(jobs)} reviews to score with {SOURCE} ({len(done)} already done)", flush=True)
 
@@ -109,7 +117,7 @@ def cmd_score(args) -> None:
     failed = 0
     with ThreadPoolExecutor(max_workers=args.workers) as pool, open(args.out, "a") as out:
         for n, res in enumerate(pool.map(one, jobs), 1):
-            if res.get("score") is None:
+            if res.get("error") in TRANSIENT:
                 failed += 1
                 continue                   # not written, so a rerun retries it
             out.write(json.dumps(res) + "\n")
@@ -117,9 +125,7 @@ def cmd_score(args) -> None:
             if n % 20 == 0:
                 print(f"  {n}/{len(jobs)} done, {failed} failed", flush=True)
     if failed:
-        # A judge that's down fails every call in seconds; a report built on
-        # zero verdicts once went out as "done" (lkml-reviewer, 2026-11-15).
-        sys.exit(f"{failed}/{len(jobs)} verdicts failed (judge unreachable or unparseable); rerun to retry them")
+        sys.exit(f"{failed}/{len(jobs)} verdicts failed: judge unreachable; rerun to retry them")
 
 
 def paired(scores: list[dict], a: str, b: str) -> dict:

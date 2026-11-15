@@ -2,7 +2,7 @@
 # v5 step 2b: a reading pack for the human check (PLAN-v5: read 20 pairs; is
 # "chosen" really the better review, judged against Linus' reply?).
 . "$(dirname "$0")/lib.sh"
-d="$QROOT/data/v5"
+d="$QROOT/data/v5/${V5_SET:-full}"
 python3 - "$d" <<'PY' > "$d/CHECK.md"
 import json, random, statistics, sys
 d = sys.argv[1]

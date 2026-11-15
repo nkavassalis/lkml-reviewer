@@ -26,3 +26,11 @@ def _in_closure(main, node):
     """True if node sits in a nested function, which runs after the wrap."""
     return any(isinstance(f, ast.FunctionDef) and f is not main and node in ast.walk(f)
                for f in ast.walk(main))
+
+
+def test_the_model_is_put_in_training_mode():
+    # HF's gradient checkpointing is a no-op in eval mode (from_pretrained's
+    # default): without .train() the DPO smoke test ran out of memory.
+    calls = [n.func.attr for n in ast.walk(ast.parse(SRC.read_text()))
+             if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)]
+    assert "train" in calls and "gradient_checkpointing_enable" in calls

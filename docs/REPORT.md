@@ -231,9 +231,36 @@ a virtue" clause), which is part of v3's 45-28. By v5's own rubric every
 fine-tune scores ~2/10 and the base model scores higher: our models are short
 and thin, more so each version (v2 437, v3 362, v4 274 chars).
 
-**Next:** the review-only test (PLAN-v5): v3's recipe on just the 1,718 pairs
-whose reply engages the patch (median reply 969 chars). The DPO pilot waits
-for it.
+**Next:** the review-only test (§5d).
+
+## 5d. The review-only test (2026-11-15)
+
+v3's recipe (LoRA r16, lr 1e-4, 1 epoch, two nodes, patch-first) on only the
+1,718 of v4's 5,165 training pairs whose reply names something from the patch.
+Same 100 held-out patches, 1 sample each, scored by v5's rubric
+(`train/rubric.py`; Nick checked 10 of its verdicts by hand and agreed with
+all of them).
+
+| | v3 | v4 | review-only |
+|---|---|---|---|
+| rubric score (1-10) | 2.04 | 1.89 | **2.54** (vs v3 +0.50, 95% CI +0.23..+0.77) |
+| false claims per review | 1.10 | 1.03 | 1.54 (vs v3 +0.44, CI +0.03..+0.87) |
+| names something from the patch | 19% | 24% | 45% (Linus 36%, its training targets 100% by construction) |
+| median length (chars) | 362 | 274 | 682 (Linus 924) |
+| signatures / emails / loops | 0 / 0 / 0% | 0 / 0 / 0% | 0 / 1% / 0% |
+
+Held-out loss 1.911 (base 2.121). **By the criteria set before training it is
+not the fix:** the rubric criterion passed, but false claims rose just past
+noise, and one review of 100 contained an email address (gate: zero; its
+training targets have none). The pre-mortem's case 2 happened: training only
+on replies that cite the code taught the model to cite something, and with
+nothing real to say it sometimes invents. Still, it's the first change since v2
+that moved the target metric, and it moved the right way: the data was the
+lever, not the training.
+
+**Decision (Nick, 2026-11-15): v5's preference training starts from it**
+("start from the review-only model"). Its weakness, false claims, is what
+v5's rubric punishes hardest. PLAN-v5.
 
 ## 6. What we learned
 

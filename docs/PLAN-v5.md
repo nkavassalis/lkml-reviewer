@@ -118,6 +118,21 @@ addresses, no loops). **Not the fix if** the rubric is level or lower.
 makes more false claims (the false-claims line), or (3) fewer updates simply
 undertrain it (held-out loss and style metrics vs v3's).
 
+**Outcome (2026-11-15): not the fix by the criteria, but v5 starts from it.**
+Rubric 2.54 vs v3's 2.04 (+0.50, CI +0.23..+0.77): met. False claims 1.54
+vs 1.10 (+0.44, CI +0.03..+0.87): not met. Gates: one email address in 100
+reviews: not met. Pre-mortem case 2 (more identifiers, more false claims)
+happened. REPORT §5d. Nick, 2026-11-15: "start from the review-only model".
+Reasoning: it's the best model on the score DPO optimizes, and false claims
+are what that score punishes hardest. Consequences: `data/v5/BASE` = rev; DPO's
+reference and starting policy are `rev/adapter-final`; candidate patches come
+from the review-only training set (`data/rev/sft.jsonl`), so every
+candidate is judged against a reference that is a review. Then the pilot
+Nick chose on 2026-11-14 ("Pilot first"): 50 patches x 4, pair yield at gaps
+2/3/4, and he sets the full run's N and gap (`v5-settings`, a human gate).
+**Data rate (candidate patches):** names something from the patch: 100% of
+references (the review-only set).
+
 **Judge audit (2026-11-15):** Nick read the 10-item pack
 (`train/judge_audit.py`; half the verdicts reporting false claims, half
 not) and agreed with every verdict: "I agree with the Judge's verdicts." The

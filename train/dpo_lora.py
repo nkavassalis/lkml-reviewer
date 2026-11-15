@@ -130,6 +130,15 @@ def main() -> None:
                 p.requires_grad = ".policy." in n
 
     use("policy")
+    # Training mode: HF applies gradient checkpointing only when training, and
+    # from_pretrained returns eval mode. Without this the smoke test kept every
+    # layer's activations and ran out of memory (2026-11-15). Dropout off, as in
+    # TRL's DPO: the reference pass must be deterministic, and the policy's
+    # log-probs comparable to it.
+    core.train()
+    for m in core.modules():
+        if isinstance(m, torch.nn.Dropout):
+            m.p = 0.0
     params = [p for p in model.parameters() if p.requires_grad]
     log(fh, f"trainable params {sum(p.numel() for p in params) / 1e6:.1f}M (policy adapter only)")
     if DISTRIBUTED:
