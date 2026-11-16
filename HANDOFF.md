@@ -7,31 +7,24 @@ design doc; this file is "where the work actually stopped". Results are in
 
 ---
 
-## 0. Status (2026-11-15)
+## 0. Status (2026-11-16)
 
 Rewrite this section whenever the state changes; history goes in
 `docs/LEARNINGS.md` and `docs/REPORT.md`, not here.
 
-- **The review-only test is done** (REPORT §5d): rubric 2.54 vs v3's 2.04, the
-  first real gain since v2, but false claims rose (1.54 vs 1.10). **Nick chose
-  it as v5's starting model** (`data/v5/BASE` = rev; PLAN-v5).
+- **The queue runner is stopped** (Nick, 2026-11-16: `scripts/queue-runner.sh
+  stop`). Nothing runs until `scripts/queue-runner.sh start`. The queue state is
+  intact; the next item is `v5-pilot-score`.
+- **v5 starts from the review-only model** (REPORT §5d; PLAN-v5;
+  `data/v5/BASE` = rev). The DPO smoke test passed on two nodes (2026-11-15).
+- **The pilot's candidates are done:** 50 review-only patches x 4 reviews,
+  `data/v5/pilot/out/`. Next, when the queue runs again: scoring
+  (`v5-pilot-score`, needs the window), the pair-yield report, then Nick sets N
+  and gap at `v5-settings`.
 - **The judge is validated:** Nick agreed with all 10 audit verdicts.
-- **Queue:** `dpo-smoke` (the DPO trainer's first 2-node run; three bugs
-  fixed today: DDP hid `set_adapter`; no `train()`, so no gradient
-  checkpointing and OOM; logits for the prompt too) -> the v5 pilot
-  (`v5-pilot-candidates`/`-score`/`-report`: 50 review-only patches x 4, pair
-  yield) -> `v5-settings` (human gate: Nick sets N and gap in
-  `data/v5/SETTINGS`) -> the full candidates, scoring, check pack, human check.
-  The DPO training items still need adding after the human check, starting
-  from `rev/adapter-final`.
-- **The thinking test has no result:** the judge was down when it scored (0/60),
-  and 28/30 reasoning runs hit the token limit before writing a review. It
-  needs a far larger budget; Nick hasn't asked for a rerun.
-- **vLLM was down 03:21-10:43 UTC** after a crashed run (restored too soon;
-  "serving confirmed" checked only that the container ran). Fixed: the restore
-  waits for trainers to exit; `ensure_serving` checks serving after a model load.
-- **Cluster outside the window until 2026-11-15 07:40 ET**
-  (`data/queue/runner/open-until`); after that, window items wait for 20:00 ET.
+- **The thinking test has no result:** the judge was down when it scored, and
+  28/30 reasoning runs hit the token limit. Not rerun.
+- **Serving:** vLLM up and answering (checked 2026-11-16 after the pilot).
 - **Published:** v3 as `nkavassalis/lkml-reviewer-lora`.
 
 ## 1. What lives where
