@@ -375,3 +375,20 @@ that `train()` is called. The logits change stays (it's correct and smaller).
 call `train()`; checkpointing is silently off without it. And a fix for a
 resource failure isn't confirmed until the number moves: identical memory
 figures meant the first diagnosis was wrong.
+
+## 2026-11-15: The smoke test passed and the queue said it failed
+
+**Believed:** the DPO smoke step checked the cluster's result correctly.
+**Evidence:** the plan passed (two DPO steps, checkpoint, final adapter, eval
+on both nodes) and wrote its marker with `touch`. The queue step checked it with
+`test -s`, which also requires the file to be non-empty, so it reported "did not
+pass" and the queue halted: nothing ran on the night of 2026-11-15. Separately, an
+approval made while that step was running was lost. `workqueue.py run` kept the
+state it loaded at the start and wrote all of it back hours later.
+**Changed:** `test -f`; `tests/test_markers.py` rejects `-s` on any `*.ok`;
+`workqueue.py run` re-reads the state before writing its own item, with a test
+for an approval made mid-step.
+**Generalizes:** yes: template. A check that has only ever seen failures is
+untested: run the after-check against a real pass before trusting it. And a
+long-running writer must re-read shared state before saving (workqueue.py, in
+the template too).

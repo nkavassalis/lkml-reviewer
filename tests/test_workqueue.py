@@ -186,3 +186,24 @@ after = ["decide"]
     assert json.loads((tmp_path / "state.json").read_text())["decide"]["status"] == "done"
     assert nxt(env).strip() == "RUN next"
     assert (tmp_path / "runs.txt").read_text().count("ran") == 1
+
+
+def test_an_approval_made_while_a_step_runs_survives_it(tmp_path):
+    # lkml-reviewer 2026-11-15: approved during a long step; the step wrote back
+    # the state it loaded at its start and the approval was lost.
+    env = setup(tmp_path, f'''
+[[item]]
+id = "long"
+title = "a long step; a person approves the gate meanwhile"
+run = "{sys.executable} {WQ} approve gate"
+
+[[item]]
+id = "gate"
+title = "human gate"
+run = "true"
+gate = "human"
+''')
+    wq(env, "run", "long")
+    state = json.loads((tmp_path / "state.json").read_text())
+    assert state["long"]["status"] == "done"
+    assert state["gate"]["status"] == "approved"

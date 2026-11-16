@@ -129,8 +129,16 @@ def run(item: dict, state: dict) -> int:
         fh.write(f"=== {time.strftime('%F %T')} exit {rc}\n")
     passes += 1
     status = {0: "done", RESUME_LATER: "pending", NEEDS_PERSON: "needs-person"}.get(rc, "failed")
-    state[item["id"]].update(status=status, rc=rc, passes=passes, ended=time.strftime("%F %T"))
-    save_state(state)
+    # Re-read before writing: a step can run for hours, and anything changed
+    # meanwhile (an `approve`, a `reset`) must survive. Writing back the copy
+    # loaded at the start undid an approval (lkml-reviewer, 2026-11-15).
+    fresh = load_state()
+    entry = fresh.get(item["id"], state[item["id"]])
+    entry.update(status=status, rc=rc, passes=passes, ended=time.strftime("%F %T"))
+    fresh[item["id"]] = entry
+    save_state(fresh)
+    state.clear()
+    state.update(fresh)
     return rc
 
 

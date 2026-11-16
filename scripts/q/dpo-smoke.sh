@@ -16,5 +16,5 @@ deploy_train dpo_lora.py dpo_core.py adapter_ckpt.py sft_lora.py compare.py run-
 on_master "mkdir -p ~/$W/v5" && scp -q "$QROOT/data/v5/smoke-pairs.jsonl" "$MASTER:$W/v5/smoke-pairs.jsonl" || exit 1
 cluster_plan night-plan-dpo-smoke.sh; rc=$?
 [ $rc -eq 0 ] || exit $rc
-on_master "cd ~/$W && test -s dpo-smoke.ok" || { say "smoke test did not pass (see dpo-smoke/train.log on the master)"; exit 1; }
+on_master "cd ~/$W && test -f dpo-smoke.ok" || { say "smoke test did not pass (see dpo-smoke/train.log on the master)"; exit 1; }
 on_master "cd ~/$W && tail -6 dpo-smoke/train.log && ls -la dpo-smoke/adapter-final"
